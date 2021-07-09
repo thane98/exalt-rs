@@ -85,3 +85,8 @@ pub enum Opcode {
     ReturnTrue,
     Label(String),
 }
+
+pub fn load_opcodes(opcodes_yaml: &str) -> anyhow::Result<Vec<Opcode>> {
+    let res: Vec<Opcode> = serde_yaml::from_str(opcodes_yaml)?;
+    Ok(res)
+}
