@@ -1,4 +1,6 @@
-use serde::{Serialize, Deserialize};
+use encoding_rs::SHIFT_JIS;
+use serde::{Deserialize, Serialize};
+use strum_macros::EnumString;
 
 pub enum EventArgType {
     Str,
@@ -13,7 +15,9 @@ pub enum EventArg {
     Float(f32),
 }
 
+#[derive(Debug, Clone, Copy, EnumString)]
 pub enum Game {
+    FE10,
     FE13,
     FE14,
     FE15,
@@ -28,6 +32,12 @@ pub enum Opcode {
     VarAddr(u16),
     ArrAddr(u16),
     PtrAddr(u16),
+    GlobalVarLoad(u16),
+    GlobalArrLoad(u16),
+    GlobalPtrLoad(u16),
+    GlobalVarAddr(u16),
+    GlobalArrAddr(u16),
+    GlobalPtrAddr(u16),
     IntLoad(i32),
     StrLoad(String),
     FloatLoad(f32),
@@ -68,7 +78,7 @@ pub enum Opcode {
     FloatGreaterThan,
     GreaterThanEqualTo,
     FloatGreaterThanEqualTo,
-    CallById(u8),
+    CallById(usize),
     CallByName(String, u8),
     SetReturn,
     Jump(String),
@@ -84,9 +94,47 @@ pub enum Opcode {
     ReturnFalse,
     ReturnTrue,
     Label(String),
+    StringEquals,
+    StringNotEquals,
+    Return,
+    Nop0x40,
+    Assign,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FunctionData {
+    pub function_type: u8,
+    pub arity: u8,
+    pub frame_size: usize,
+    pub name: Option<String>,
+    pub args: Vec<EventArg>,
+    pub code: Vec<Opcode>,
 }
 
 pub fn load_opcodes(opcodes_yaml: &str) -> anyhow::Result<Vec<Opcode>> {
     let res: Vec<Opcode> = serde_yaml::from_str(opcodes_yaml)?;
     Ok(res)
+}
+
+pub fn read_shift_jis_string(data: &[u8], start: usize) -> anyhow::Result<String> {
+    if start > data.len() {
+        return Err(anyhow::anyhow!("Out of bounds text pointer."));
+    }
+    let mut end = start;
+    while end < data.len() && data[end] != 0 {
+        end += 1;
+    }
+    if start == end {
+        Ok(String::new())
+    } else {
+        let (v, _, failure) = SHIFT_JIS.decode(&data[start..end]);
+        if !failure {
+            Ok(v.to_string())
+        } else {
+            Err(anyhow::anyhow!(
+                "Malformed shift-jis sequence addr={:X}",
+                start
+            ))
+        }
+    }
 }

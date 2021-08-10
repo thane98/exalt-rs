@@ -1,6 +1,6 @@
 use crate::common::read_shift_jis_string;
-use crate::v3ds_common::{RawFunctionData, V3dsCmbHeader, FE14_EVENTS};
-use crate::{EventArg, EventArgType, FunctionData, Opcode};
+use crate::vgcn_common::{RawFunctionData, VGcnCmbHeader};
+use crate::{EventArg, FunctionData, Opcode};
 use anyhow::Context;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use std::collections::{HashMap, HashSet};
@@ -12,28 +12,18 @@ struct ResolveState<'a> {
     next_label: usize,
 }
 
-fn read_cmb_header(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<V3dsCmbHeader> {
+fn read_cmb_header(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<VGcnCmbHeader> {
     let magic_number = cursor.read_u32::<LittleEndian>()?;
+    cursor.set_position(0x18);
     let revision = cursor.read_u32::<LittleEndian>()?;
-    let unk1 = cursor.read_u32::<LittleEndian>()?;
-    let script_name_address = cursor.read_u32::<LittleEndian>()?;
-    let unk2 = cursor.read_u32::<LittleEndian>()?;
-    let unk3 = cursor.read_u32::<LittleEndian>()?;
-    let unk4 = cursor.read_u32::<LittleEndian>()?;
-    let function_table_address = cursor.read_u32::<LittleEndian>()?;
+    cursor.set_position(0x24);
     let text_data_address = cursor.read_u32::<LittleEndian>()?;
-    let padding = cursor.read_u32::<LittleEndian>()?;
-    Ok(V3dsCmbHeader {
+    let function_table_address = cursor.read_u32::<LittleEndian>()?;
+    Ok(VGcnCmbHeader {
         magic_number,
         revision,
-        unk1,
-        script_name_address,
-        unk2,
-        unk3,
-        unk4,
-        function_table_address,
         text_data_address,
-        padding,
+        function_table_address,
     })
 }
 
@@ -48,70 +38,31 @@ fn read_function_table(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<Vec<usize>>
 }
 
 fn read_function_data(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<RawFunctionData> {
-    let header_address = cursor.read_u32::<LittleEndian>()?;
+    let name_address = cursor.read_u32::<LittleEndian>()?;
     let code_address = cursor.read_u32::<LittleEndian>()?;
+    let parent_address = cursor.read_u32::<LittleEndian>()?;
     let function_type = cursor.read_u8()?;
     let arity = cursor.read_u8()?;
-    let frame_size = cursor.read_u8()?;
-    let pad = cursor.read_u8()?;
-    let id = cursor.read_u32::<LittleEndian>()?;
-    let name_address = cursor.read_u32::<LittleEndian>()?;
-    let args_address = cursor.read_u32::<LittleEndian>()?;
+    let param_count = cursor.read_u8()?;
+    let padding = cursor.read_u8()?;
+    let id = cursor.read_u16::<LittleEndian>()?;
+    let frame_size = cursor.read_u16::<LittleEndian>()?;
+    let mut params: Vec<i16> = Vec::new();
+    for _ in 0..param_count {
+        params.push(cursor.read_i16::<LittleEndian>()?);
+    }
     Ok(RawFunctionData {
-        header_address,
+        name_address,
         code_address,
+        parent_address,
         function_type,
         arity,
-        frame_size,
-        pad,
+        param_count,
+        padding,
         id,
-        name_address,
-        args_address,
+        frame_size,
+        params,
     })
-}
-
-fn read_function_args(
-    cursor: &mut Cursor<&[u8]>,
-    text_data: &[u8],
-    function_type: u32,
-    count: usize,
-) -> anyhow::Result<Vec<EventArg>> {
-    // TODO: Handle signatures for FE13 and FE15
-    if function_type == 0 {
-        Ok(Vec::new())
-    } else {
-        let mut args: Vec<EventArg> = Vec::new();
-        match FE14_EVENTS.get(&function_type) {
-            Some(signature) => {
-                if count != signature.len() {
-                    return Err(anyhow::anyhow!(
-                        "Known signature and function header disagree on arity."
-                    ));
-                }
-                for arg in signature {
-                    match arg {
-                        EventArgType::Str => {
-                            let offset = cursor.read_u32::<LittleEndian>()? as usize;
-                            let text = read_shift_jis_string(text_data, offset)?;
-                            args.push(EventArg::Str(text));
-                        }
-                        EventArgType::Int => {
-                            args.push(EventArg::Int(cursor.read_i32::<LittleEndian>()?));
-                        }
-                        EventArgType::Float => {
-                            args.push(EventArg::Float(cursor.read_f32::<LittleEndian>()?));
-                        }
-                    }
-                }
-            }
-            _ => {
-                for _ in 0..count {
-                    args.push(EventArg::Int(cursor.read_i32::<LittleEndian>()?));
-                }
-            }
-        }
-        Ok(args)
-    }
 }
 
 fn disassemble_function(
@@ -122,7 +73,7 @@ fn disassemble_function(
     let mut resolve_state = ResolveState::new(text_data);
     let mut ops: Vec<(usize, Opcode)> = Vec::new();
     loop {
-        let (real_addr, raw_op) = Opcode::read_v3ds_opcode(cursor, &mut resolve_state)
+        let (real_addr, raw_op) = Opcode::read_vgcn_opcode(cursor, &mut resolve_state)
             .context("Failed to read opcode.")?;
         match raw_op {
             Opcode::Done => break,
@@ -171,18 +122,11 @@ fn read_function(
     } else {
         None
     };
-    let args = if raw_function_data.args_address != 0 {
-        cursor.set_position(raw_function_data.args_address as u64);
-        read_function_args(
-            cursor,
-            text_data,
-            raw_function_data.function_type as u32,
-            raw_function_data.arity as usize,
-        )
-        .context("Failed to read function args.")?
-    } else {
-        Vec::new()
-    };
+    let args = raw_function_data
+        .params
+        .iter()
+        .map(|p| EventArg::Int(*p as i32))
+        .collect();
     let code = if raw_function_data.code_address != 0 {
         cursor.set_position(raw_function_data.code_address as u64);
         disassemble_function(cursor, text_data).context("Failed to disassemble function.")?
@@ -267,7 +211,7 @@ impl<'a> ResolveState<'a> {
 }
 
 impl Opcode {
-    fn read_v3ds_opcode(
+    fn read_vgcn_opcode(
         cursor: &mut Cursor<&[u8]>,
         state: &mut ResolveState,
     ) -> anyhow::Result<(usize, Opcode)> {
@@ -287,6 +231,18 @@ impl Opcode {
             0xA => Ok((addr, Opcode::ArrAddr(cursor.read_u16::<BigEndian>()?))),
             0xB => Ok((addr, Opcode::PtrAddr(cursor.read_u8()? as u16))),
             0xC => Ok((addr, Opcode::PtrAddr(cursor.read_u16::<BigEndian>()?))),
+            0xD => Ok((addr, Opcode::GlobalVarLoad(cursor.read_u8()? as u16))),
+            0xE => Ok((addr, Opcode::GlobalVarLoad(cursor.read_u16::<BigEndian>()?))),
+            0xF => Ok((addr, Opcode::GlobalArrLoad(cursor.read_u8()? as u16))),
+            0x10 => Ok((addr, Opcode::GlobalArrLoad(cursor.read_u16::<BigEndian>()?))),
+            0x11 => Ok((addr, Opcode::GlobalPtrLoad(cursor.read_u8()? as u16))),
+            0x12 => Ok((addr, Opcode::GlobalPtrLoad(cursor.read_u16::<BigEndian>()?))),
+            0x13 => Ok((addr, Opcode::GlobalVarAddr(cursor.read_u8()? as u16))),
+            0x14 => Ok((addr, Opcode::GlobalVarAddr(cursor.read_u16::<BigEndian>()?))),
+            0x15 => Ok((addr, Opcode::GlobalArrAddr(cursor.read_u8()? as u16))),
+            0x16 => Ok((addr, Opcode::GlobalArrAddr(cursor.read_u16::<BigEndian>()?))),
+            0x17 => Ok((addr, Opcode::GlobalPtrAddr(cursor.read_u8()? as u16))),
+            0x18 => Ok((addr, Opcode::GlobalPtrAddr(cursor.read_u16::<BigEndian>()?))),
             0x19 => Ok((addr, Opcode::IntLoad(cursor.read_i8()? as i32))),
             0x1A => Ok((
                 addr,
@@ -305,95 +261,91 @@ impl Opcode {
                 addr,
                 Opcode::StrLoad(state.text(cursor.read_u32::<BigEndian>()? as usize)?),
             )),
-            0x1F => Ok((addr, Opcode::FloatLoad(cursor.read_f32::<BigEndian>()?))),
-            0x20 => Ok((addr, Opcode::Dereference)),
-            0x21 => Ok((addr, Opcode::Consume)),
-            0x23 => Ok((addr, Opcode::CompleteAssign)),
-            0x24 => Ok((addr, Opcode::Fix)),
-            0x25 => Ok((addr, Opcode::Float)),
-            0x26 => Ok((addr, Opcode::Add)),
-            0x27 => Ok((addr, Opcode::FloatAdd)),
-            0x28 => Ok((addr, Opcode::Subtract)),
-            0x29 => Ok((addr, Opcode::FloatSubtract)),
-            0x2A => Ok((addr, Opcode::Multiply)),
-            0x2B => Ok((addr, Opcode::FloatMultiply)),
-            0x2C => Ok((addr, Opcode::Divide)),
-            0x2D => Ok((addr, Opcode::FloatDivide)),
-            0x2E => Ok((addr, Opcode::Modulo)),
-            0x2F => Ok((addr, Opcode::IntNegate)),
-            0x30 => Ok((addr, Opcode::FloatNegate)),
-            0x31 => Ok((addr, Opcode::BinaryNot)),
-            0x32 => Ok((addr, Opcode::LogicalNot)),
-            0x33 => Ok((addr, Opcode::BinaryOr)),
-            0x34 => Ok((addr, Opcode::BinaryAnd)),
-            0x35 => Ok((addr, Opcode::Xor)),
-            0x36 => Ok((addr, Opcode::LeftShift)),
-            0x37 => Ok((addr, Opcode::RightShift)),
-            0x38 => Ok((addr, Opcode::Equal)),
-            0x39 => Ok((addr, Opcode::FloatEqual)),
-            0x3A => Ok((addr, Opcode::Exlcall)),
-            0x3B => Ok((addr, Opcode::NotEqual)),
-            0x3C => Ok((addr, Opcode::FloatNotEqual)),
-            0x3D => Ok((addr, Opcode::Nop0x3D)),
-            0x3E => Ok((addr, Opcode::LessThan)),
-            0x3F => Ok((addr, Opcode::FloatLessThan)),
-            0x40 => Ok((addr, Opcode::LessThanEqualTo)),
-            0x41 => Ok((addr, Opcode::FloatLessThanEqualTo)),
-            0x42 => Ok((addr, Opcode::GreaterThan)),
-            0x43 => Ok((addr, Opcode::FloatGreaterThan)),
-            0x44 => Ok((addr, Opcode::GreaterThanEqualTo)),
-            0x45 => Ok((addr, Opcode::FloatGreaterThanEqualTo)),
-            0x46 => Ok((addr, Opcode::CallById(cursor.read_u8()? as usize))),
-            0x47 => Ok((
+            0x1F => Ok((addr, Opcode::Dereference)),
+            0x20 => Ok((addr, Opcode::Consume)),
+            0x21 => Ok((addr, Opcode::CompleteAssign)),
+            0x22 => Ok((addr, Opcode::Add)),
+            0x23 => Ok((addr, Opcode::Subtract)),
+            0x24 => Ok((addr, Opcode::Multiply)),
+            0x25 => Ok((addr, Opcode::Divide)),
+            0x26 => Ok((addr, Opcode::Modulo)),
+            0x27 => Ok((addr, Opcode::IntNegate)),
+            0x28 => Ok((addr, Opcode::BinaryNot)),
+            0x29 => Ok((addr, Opcode::LogicalNot)),
+            0x2A => Ok((addr, Opcode::BinaryOr)),
+            0x2B => Ok((addr, Opcode::BinaryAnd)),
+            0x2C => Ok((addr, Opcode::Xor)),
+            0x2D => Ok((addr, Opcode::LeftShift)),
+            0x2E => Ok((addr, Opcode::RightShift)),
+            0x2F => Ok((addr, Opcode::Equal)),
+            0x30 => Ok((addr, Opcode::NotEqual)),
+            0x31 => Ok((addr, Opcode::LessThan)),
+            0x32 => Ok((addr, Opcode::LessThanEqualTo)),
+            0x33 => Ok((addr, Opcode::GreaterThan)),
+            0x34 => Ok((addr, Opcode::GreaterThanEqualTo)),
+            0x35 => Ok((addr, Opcode::StringEquals)),
+            0x36 => Ok((addr, Opcode::StringNotEquals)),
+            0x37 => {
+                let b1 = cursor.read_u8()?;
+                let value = if (b1 & 0b10000000) != 0 {
+                    ((b1 as u16 & 0b01111111) << 8) | cursor.read_u8()? as u16
+                } else {
+                    b1 as u16
+                };
+                Ok((addr, Opcode::CallById(value as usize)))
+            }
+            0x38 => Ok((
                 addr,
                 Opcode::CallByName(
                     state.text(cursor.read_u16::<BigEndian>()? as usize)?,
                     cursor.read_u8()?,
                 ),
             )),
-            0x48 => Ok((addr, Opcode::SetReturn)),
-            0x49 => Ok((
+            0x39 => Ok((addr, Opcode::Return)),
+            0x3A => Ok((
                 addr,
                 Opcode::Jump(state.label(calculate_jump_address(
                     addr,
                     cursor.read_i16::<BigEndian>()?,
                 ))),
             )),
-            0x4A => Ok((
+            0x3B => Ok((
                 addr,
                 Opcode::JumpNotZero(state.label(calculate_jump_address(
                     addr,
                     cursor.read_i16::<BigEndian>()?,
                 ))),
             )),
-            0x4B => Ok((
+            0x3C => Ok((
                 addr,
                 Opcode::Or(state.label(calculate_jump_address(
                     addr,
                     cursor.read_i16::<BigEndian>()?,
                 ))),
             )),
-            0x4C => Ok((
+            0x3D => Ok((
                 addr,
                 Opcode::JumpZero(state.label(calculate_jump_address(
                     addr,
                     cursor.read_i16::<BigEndian>()?,
                 ))),
             )),
-            0x4D => Ok((
+            0x3E => Ok((
                 addr,
                 Opcode::And(state.label(calculate_jump_address(
                     addr,
                     cursor.read_i16::<BigEndian>()?,
                 ))),
             )),
-            0x4E => Ok((addr, Opcode::Yield)),
-            0x50 => Ok((addr, Opcode::Format(cursor.read_u8()?))),
-            0x51 => Ok((addr, Opcode::Inc)),
-            0x52 => Ok((addr, Opcode::Dec)),
-            0x53 => Ok((addr, Opcode::Copy)),
-            0x54 => Ok((addr, Opcode::ReturnFalse)),
-            0x55 => Ok((addr, Opcode::ReturnTrue)),
+            0x3F => Ok((addr, Opcode::Yield)),
+            0x40 => Ok((addr, Opcode::Nop0x40)),
+            0x41 => Ok((addr, Opcode::Format(cursor.read_u8()?))),
+            0x42 => Ok((addr, Opcode::Inc)),
+            0x43 => Ok((addr, Opcode::Dec)),
+            0x44 => Ok((addr, Opcode::Copy)),
+            0x45 => Ok((addr, Opcode::ReturnFalse)),
+            0x46 => Ok((addr, Opcode::ReturnTrue)),
+            0x47 => Ok((addr, Opcode::Assign)),
             _ => Err(anyhow::anyhow!("Unrecognized opcode {:X}", opcode)),
         }
     }

@@ -1,7 +1,6 @@
+use crate::EventArgType;
 use lazy_static::lazy_static;
 use maplit::hashmap;
-use serde::{Serialize, Deserialize};
-use crate::{EventArg, EventArgType, Opcode};
 use std::collections::HashMap;
 
 pub struct V3dsCmbHeader {
@@ -28,16 +27,6 @@ pub struct RawFunctionData {
     pub id: u32,
     pub name_address: u32,
     pub args_address: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct FunctionData {
-    pub function_type: u8,
-    pub arity: u8,
-    pub frame_size: u8,
-    pub name: Option<String>,
-    pub args: Vec<EventArg>,
-    pub code: Vec<Opcode>,
 }
 
 lazy_static! {
@@ -147,7 +136,10 @@ impl V3dsCmbHeader {
         if self.magic_number != 0x626D63 {
             Err(anyhow::anyhow!("Bad CMB magic number."))
         } else if self.revision != 0x20110819 {
-            Err(anyhow::anyhow!("Unsupported revision '{:X}'", self.revision))
+            Err(anyhow::anyhow!(
+                "Unsupported revision '{:X}'",
+                self.revision
+            ))
         } else {
             Ok(())
         }

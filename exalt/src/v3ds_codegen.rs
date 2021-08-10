@@ -1,4 +1,4 @@
-use crate::{Opcode, V3dsFunctionData};
+use crate::{FunctionData, Opcode};
 use anyhow::Context;
 use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 use encoding_rs::SHIFT_JIS;
@@ -34,7 +34,7 @@ fn encode_shift_jis(text: &str) -> anyhow::Result<Vec<u8>> {
     Ok(bytes.into())
 }
 
-fn get_function_name_bytes(function: &V3dsFunctionData) -> anyhow::Result<Vec<u8>> {
+fn get_function_name_bytes(function: &FunctionData) -> anyhow::Result<Vec<u8>> {
     if let Some(name) = &function.name {
         if function.function_type == 0 && name.contains("::") {
             let mut bytes = encode_shift_jis(name)?;
@@ -49,7 +49,7 @@ fn get_function_name_bytes(function: &V3dsFunctionData) -> anyhow::Result<Vec<u8
 }
 
 fn get_function_arg_bytes(
-    function: &V3dsFunctionData,
+    function: &FunctionData,
     text_data: &mut CodeGenTextData,
 ) -> anyhow::Result<Vec<u8>> {
     if function.function_type == 0 && !function.args.is_empty() {
@@ -72,14 +72,14 @@ fn get_function_arg_bytes(
 }
 
 fn gen_function_code(
-    function: &V3dsFunctionData,
+    function: &FunctionData,
     function_id: u32,
     base_address: usize,
     text_data: &mut CodeGenTextData,
 ) -> anyhow::Result<Vec<u8>> {
     // Calculate addresses and serialize name / args.
-    let name_bytes: Vec<u8> = get_function_name_bytes(function)
-        .context("Failed to write function name.")?;
+    let name_bytes: Vec<u8> =
+        get_function_name_bytes(function).context("Failed to write function name.")?;
     let arg_bytes: Vec<u8> = get_function_arg_bytes(function, text_data)
         .context("Failed to write function arguments.")?;
     let extended_header_address = base_address + FUNCTION_HEADER_SIZE;
@@ -104,7 +104,10 @@ fn gen_function_code(
     let mut raw_code: Vec<u8> = Vec::new();
     for op in &function.code {
         op.to_v3ds_bytes(&mut raw_code, &mut code_gen_state)
-            .context(format!("Failed to convert opcode to v3ds format: '{:?}'", op))?;
+            .context(format!(
+                "Failed to convert opcode to v3ds format: '{:?}'",
+                op
+            ))?;
     }
     raw_code.push(0);
     code_gen_state.backpatch(&mut raw_code)?;
@@ -115,7 +118,7 @@ fn gen_function_code(
     raw.extend((code_address as u32).to_le_bytes().iter());
     raw.push(function.function_type);
     raw.push(function.arity);
-    raw.push(function.frame_size);
+    raw.push(function.frame_size as u8);
     raw.push(0); // Padding
     raw.extend(function_id.to_le_bytes().iter());
     raw.extend((name_address as u32).to_le_bytes().iter());
@@ -126,11 +129,11 @@ fn gen_function_code(
     Ok(raw)
 }
 
-pub fn gen_v3ds_code(script_name: &str, functions: &[V3dsFunctionData]) -> anyhow::Result<Vec<u8>> {
+pub fn gen_v3ds_code(script_name: &str, functions: &[FunctionData]) -> anyhow::Result<Vec<u8>> {
     gen_code(script_name, functions).context("Code generation failed.")
 }
 
-fn gen_code(script_name: &str, functions: &[V3dsFunctionData]) -> anyhow::Result<Vec<u8>> {
+fn gen_code(script_name: &str, functions: &[FunctionData]) -> anyhow::Result<Vec<u8>> {
     // Write the header. Will need to revisit later to write function table and text data pointers.
     let name_bytes = encode_shift_jis(script_name)?;
     let mut raw: Vec<u8> = Vec::new();
@@ -389,7 +392,7 @@ impl Opcode {
             Opcode::FloatGreaterThanEqualTo => bytes.push(0x45),
             Opcode::CallById(v) => {
                 bytes.push(0x46);
-                bytes.push(*v);
+                bytes.push(*v as u8);
             }
             Opcode::CallByName(n, c) => {
                 let name_offset = state.text_data.offset(n)? as u16;
@@ -414,6 +417,7 @@ impl Opcode {
             Opcode::ReturnFalse => bytes.push(0x54),
             Opcode::ReturnTrue => bytes.push(0x55),
             Opcode::Label(l) => state.add_label(l, addr)?,
+            _ => return Err(anyhow::anyhow!("Unsupported V3DS opcode {:?}", self)),
         }
         Ok(())
     }

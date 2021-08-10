@@ -1,5 +1,5 @@
-use std::path::Path;
 use clap::{AppSettings, Clap};
+use std::path::Path;
 use walkdir::WalkDir;
 
 #[derive(Clap)]
@@ -25,7 +25,12 @@ fn test_v3ds_scripts(_game: exalt::Game, root: &Path) {
         if !path.is_file() || path.extension().unwrap() != "cmb" {
             continue;
         }
-        let filename = path.file_name().unwrap().to_os_string().into_string().unwrap();
+        let filename = path
+            .file_name()
+            .unwrap()
+            .to_os_string()
+            .into_string()
+            .unwrap();
         print!("Testing script '{}'... ", filename);
         let raw_file = std::fs::read(path).unwrap();
         match exalt::disassemble_v3ds(&raw_file) {
@@ -43,7 +48,7 @@ fn test_v3ds_scripts(_game: exalt::Game, root: &Path) {
                     fail_test(&err);
                     failures += 1;
                 }
-            }
+            },
             Err(err) => {
                 fail_test(&err);
                 failures += 1;
@@ -52,13 +57,20 @@ fn test_v3ds_scripts(_game: exalt::Game, root: &Path) {
     }
 
     let success_rate = (successes as f64) / (successes + failures) as f64 * 100.0;
-    println!("Successes: {}, Failures: {}, Rate: {}%", successes as i64, failures as i64, success_rate);
+    println!(
+        "Successes: {}, Failures: {}, Rate: {}%",
+        successes as i64, failures as i64, success_rate
+    );
 }
 
 fn main() {
     let args = ExaltTestingArgs::parse();
     let input_path = Path::new(&args.input);
-    println!("Testing scripts at path '{}' for game '{}'.", input_path.display(), &args.game);
+    println!(
+        "Testing scripts at path '{}' for game '{}'.",
+        input_path.display(),
+        &args.game
+    );
     if args.game.to_uppercase() == "FE14" {
         test_v3ds_scripts(exalt::Game::FE14, &input_path);
     } else {
