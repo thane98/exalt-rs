@@ -1,7 +1,7 @@
+use crate::common::encode_shift_jis;
 use crate::{FunctionData, Opcode};
 use anyhow::Context;
 use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
-use encoding_rs::SHIFT_JIS;
 use std::collections::HashMap;
 use std::io::Cursor;
 
@@ -20,18 +20,6 @@ struct CodeGenLabelEntry {
 struct CodeGenTextData {
     raw_text: Vec<u8>,
     offsets: HashMap<String, usize>,
-}
-
-fn encode_shift_jis(text: &str) -> anyhow::Result<Vec<u8>> {
-    let (bytes, _, errors) = SHIFT_JIS.encode(text);
-    if errors {
-        println!("{:X?}", bytes);
-        return Err(anyhow::anyhow!(
-            "Failed to encode string '{}' as SHIFT-JIS.",
-            text
-        ));
-    }
-    Ok(bytes.into())
 }
 
 fn get_function_name_bytes(function: &FunctionData) -> anyhow::Result<Vec<u8>> {

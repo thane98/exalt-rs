@@ -52,8 +52,7 @@ fn read_function_data(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<RawFunctionD
     let code_address = cursor.read_u32::<LittleEndian>()?;
     let function_type = cursor.read_u8()?;
     let arity = cursor.read_u8()?;
-    let frame_size = cursor.read_u8()?;
-    let pad = cursor.read_u8()?;
+    let frame_size = cursor.read_u16::<LittleEndian>()?;
     let id = cursor.read_u32::<LittleEndian>()?;
     let name_address = cursor.read_u32::<LittleEndian>()?;
     let args_address = cursor.read_u32::<LittleEndian>()?;
@@ -63,7 +62,6 @@ fn read_function_data(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<RawFunctionD
         function_type,
         arity,
         frame_size,
-        pad,
         id,
         name_address,
         args_address,

@@ -2,17 +2,19 @@ use encoding_rs::SHIFT_JIS;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 
+#[derive(Debug)]
 pub enum EventArgType {
     Str,
     Int,
     Float,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum EventArg {
-    Str(String),
     Int(i32),
     Float(f32),
+    Str(String),
 }
 
 #[derive(Debug, Clone, Copy, EnumString)]
@@ -111,6 +113,28 @@ pub struct FunctionData {
     pub code: Vec<Opcode>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrettifiedFunctionData {
+    pub function_type: u8,
+    pub arity: u8,
+    pub frame_size: usize,
+    pub name: Option<String>,
+    pub args: Vec<EventArg>,
+    pub code: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct DisassembledScript {
+    pub script_type: u32,
+    pub functions: Vec<FunctionData>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrettyDisassembledScript {
+    pub script_type: u32,
+    pub functions: Vec<PrettifiedFunctionData>,
+}
+
 pub fn load_opcodes(opcodes_yaml: &str) -> anyhow::Result<Vec<Opcode>> {
     let res: Vec<Opcode> = serde_yaml::from_str(opcodes_yaml)?;
     Ok(res)
@@ -137,4 +161,15 @@ pub fn read_shift_jis_string(data: &[u8], start: usize) -> anyhow::Result<String
             ))
         }
     }
+}
+
+pub fn encode_shift_jis(text: &str) -> anyhow::Result<Vec<u8>> {
+    let (bytes, _, errors) = SHIFT_JIS.encode(text);
+    if errors {
+        return Err(anyhow::anyhow!(
+            "Failed to encode string '{}' as SHIFT-JIS.",
+            text
+        ));
+    }
+    Ok(bytes.into())
 }

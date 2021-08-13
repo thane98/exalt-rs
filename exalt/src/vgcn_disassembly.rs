@@ -1,6 +1,6 @@
-use crate::common::read_shift_jis_string;
-use crate::vgcn_common::{RawFunctionData, VGcnCmbHeader};
-use crate::{EventArg, FunctionData, Opcode};
+use crate::common::{DisassembledScript, read_shift_jis_string};
+use crate::vgcn_common::{RawFunctionData, VGcnCmbHeader, FE10_EVENTS};
+use crate::{EventArg, EventArgType, FunctionData, Opcode};
 use anyhow::Context;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use std::collections::{HashMap, HashSet};
@@ -16,15 +16,54 @@ fn read_cmb_header(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<VGcnCmbHeader> 
     let magic_number = cursor.read_u32::<LittleEndian>()?;
     cursor.set_position(0x18);
     let revision = cursor.read_u32::<LittleEndian>()?;
-    cursor.set_position(0x24);
+    cursor.set_position(0x22);
+    let script_type = cursor.read_u16::<LittleEndian>()? as u32;
     let text_data_address = cursor.read_u32::<LittleEndian>()?;
     let function_table_address = cursor.read_u32::<LittleEndian>()?;
     Ok(VGcnCmbHeader {
         magic_number,
         revision,
+        script_type,
         text_data_address,
         function_table_address,
     })
+}
+
+fn read_function_args(
+    text_data: &[u8],
+    raw_params: &[u16],
+    function_type: u8,
+) -> anyhow::Result<Vec<EventArg>> {
+    if function_type == 0 {
+        Ok(Vec::new())
+    } else {
+        let mut args: Vec<EventArg> = Vec::new();
+        match FE10_EVENTS.get(&function_type) {
+            Some(signature) => {
+                if raw_params.len() != signature.len() {
+                    return Err(anyhow::anyhow!(
+                        "Known signature and function header disagree on arity."
+                    ));
+                }
+                for i in 0..raw_params.len() {
+                    let raw = raw_params[i];
+                    let arg = &signature[i];
+                    match arg {
+                        EventArgType::Str => {
+                            let text = read_shift_jis_string(text_data, raw as usize)?;
+                            args.push(EventArg::Str(text));
+                        }
+                        EventArgType::Int => {
+                            args.push(EventArg::Int(raw as i32));
+                        }
+                        _ => return Err(anyhow::anyhow!("Unsupported arg type {:?}", arg)),
+                    }
+                }
+            }
+            _ => args.extend(raw_params.iter().map(|r| EventArg::Int(*r as i32))),
+        }
+        Ok(args)
+    }
 }
 
 fn read_function_table(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<Vec<usize>> {
@@ -47,9 +86,9 @@ fn read_function_data(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<RawFunctionD
     let padding = cursor.read_u8()?;
     let id = cursor.read_u16::<LittleEndian>()?;
     let frame_size = cursor.read_u16::<LittleEndian>()?;
-    let mut params: Vec<i16> = Vec::new();
+    let mut params = Vec::new();
     for _ in 0..param_count {
-        params.push(cursor.read_i16::<LittleEndian>()?);
+        params.push(cursor.read_u16::<LittleEndian>()?);
     }
     Ok(RawFunctionData {
         name_address,
@@ -122,11 +161,11 @@ fn read_function(
     } else {
         None
     };
-    let args = raw_function_data
-        .params
-        .iter()
-        .map(|p| EventArg::Int(*p as i32))
-        .collect();
+    let args = read_function_args(
+        text_data,
+        &raw_function_data.params,
+        raw_function_data.function_type,
+    )?;
     let code = if raw_function_data.code_address != 0 {
         cursor.set_position(raw_function_data.code_address as u64);
         disassemble_function(cursor, text_data).context("Failed to disassemble function.")?
@@ -147,7 +186,7 @@ fn calculate_jump_address(addr: usize, diff: i16) -> usize {
     ((addr as i64) + (diff as i64) + 1) as usize
 }
 
-pub fn disassemble(input: &[u8]) -> anyhow::Result<Vec<FunctionData>> {
+pub fn disassemble(input: &[u8]) -> anyhow::Result<DisassembledScript> {
     // First, read the file header.
     let mut cursor = Cursor::new(input);
     let header = read_cmb_header(&mut cursor).context("Failed to read CMB header.")?;
@@ -181,7 +220,10 @@ pub fn disassemble(input: &[u8]) -> anyhow::Result<Vec<FunctionData>> {
             .with_context(|| format!("Failed to read function at address '{:X}'.", addr))?;
         functions.push(function);
     }
-    Ok(functions)
+    Ok(DisassembledScript {
+        script_type: header.script_type,
+        functions
+    })
 }
 
 impl<'a> ResolveState<'a> {
