@@ -9,7 +9,7 @@ pub enum EventArgType {
     Float,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum EventArg {
     Int(i32),
@@ -19,13 +19,16 @@ pub enum EventArg {
 
 #[derive(Debug, Clone, Copy, EnumString)]
 pub enum Game {
+    FE9,
     FE10,
+    FE11,
+    FE12,
     FE13,
     FE14,
     FE15,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub enum Opcode {
     Done,
     VarLoad(u16),
@@ -103,7 +106,19 @@ pub enum Opcode {
     Assign,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug)]
+pub struct RawFunctionHeader {
+    pub name_address: Option<u32>,
+    pub code_address: u32,
+    pub parent_address: Option<u32>,
+    pub args_address: Option<u32>,
+    pub frame_size: u16,
+    pub function_type: u8,
+    pub arity: u8,
+    pub param_count: u8,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct FunctionData {
     pub function_type: u8,
     pub arity: u8,
@@ -114,7 +129,7 @@ pub struct FunctionData {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct PrettifiedFunctionData {
+pub struct PrettyFunctionData {
     pub function_type: u8,
     pub arity: u8,
     pub frame_size: usize,
@@ -123,16 +138,16 @@ pub struct PrettifiedFunctionData {
     pub code: Vec<String>,
 }
 
-#[derive(Debug)]
-pub struct DisassembledScript {
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct Script {
     pub script_type: u32,
     pub functions: Vec<FunctionData>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct PrettyDisassembledScript {
+pub struct PrettyScript {
     pub script_type: u32,
-    pub functions: Vec<PrettifiedFunctionData>,
+    pub functions: Vec<PrettyFunctionData>,
 }
 
 pub fn load_opcodes(opcodes_yaml: &str) -> anyhow::Result<Vec<Opcode>> {

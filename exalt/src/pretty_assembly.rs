@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::common::PrettifiedFunctionData;
+use crate::common::PrettyFunctionData;
 use crate::{FunctionData, Opcode};
 use anyhow::Context;
 use lazy_static::lazy_static;
@@ -49,8 +49,8 @@ lazy_static! {
             "deref" => unprettify_dereference as fn(&[&str]) -> anyhow::Result<Opcode>,
             "consume" => unprettify_consume as fn(&[&str]) -> anyhow::Result<Opcode>,
             "store" => unprettify_complete_assign as fn(&[&str]) -> anyhow::Result<Opcode>,
-            "fix" => unprettify_fix as fn(&[&str]) -> anyhow::Result<Opcode>,
-            "float" => unprettify_float as fn(&[&str]) -> anyhow::Result<Opcode>,
+            "cint" => unprettify_fix as fn(&[&str]) -> anyhow::Result<Opcode>,
+            "cfloat" => unprettify_float as fn(&[&str]) -> anyhow::Result<Opcode>,
             "add" => unprettify_add as fn(&[&str]) -> anyhow::Result<Opcode>,
             "fadd" => unprettify_float_add as fn(&[&str]) -> anyhow::Result<Opcode>,
             "sub" => unprettify_subtract as fn(&[&str]) -> anyhow::Result<Opcode>,
@@ -129,8 +129,8 @@ fn prettify_opcode(op: &Opcode) -> String {
         Opcode::Dereference => "deref".to_string(),
         Opcode::Consume => "consume".to_string(),
         Opcode::CompleteAssign => "store".to_string(),
-        Opcode::Fix => "fix".to_string(),
-        Opcode::Float => "float".to_string(),
+        Opcode::Fix => "cint".to_string(),
+        Opcode::Float => "cfloat".to_string(),
         Opcode::Add => "add".to_string(),
         Opcode::FloatAdd => "fadd".to_string(),
         Opcode::Subtract => "sub".to_string(),
@@ -506,11 +506,11 @@ fn unprettify_opcode(line: &str) -> anyhow::Result<Opcode> {
     }
 }
 
-pub fn prettify(funcs: &[FunctionData]) -> Vec<PrettifiedFunctionData> {
+pub fn prettify(funcs: &[FunctionData]) -> Vec<PrettyFunctionData> {
     let mut prettified = Vec::new();
     for f in funcs {
         let code: Vec<String> = f.code.iter().map(prettify_opcode).collect();
-        prettified.push(PrettifiedFunctionData {
+        prettified.push(PrettyFunctionData {
             function_type: f.function_type,
             arity: f.arity,
             frame_size: f.frame_size,
@@ -522,7 +522,7 @@ pub fn prettify(funcs: &[FunctionData]) -> Vec<PrettifiedFunctionData> {
     prettified
 }
 
-pub fn unprettify(funcs: &[PrettifiedFunctionData]) -> anyhow::Result<Vec<FunctionData>> {
+pub fn unprettify(funcs: &[PrettyFunctionData]) -> anyhow::Result<Vec<FunctionData>> {
     let mut unprettified = Vec::new();
     for f in funcs {
         let mut code = Vec::new();

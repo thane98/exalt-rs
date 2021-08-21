@@ -1,4 +1,5 @@
 use clap::{AppSettings, Clap};
+use exalt::Game;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -6,9 +7,8 @@ use walkdir::WalkDir;
 #[clap(setting = AppSettings::ColoredHelp)]
 struct ExaltTestingArgs {
     #[clap(short, long, default_value = "FE14")]
-    game: String,
+    game: Game,
 
-    #[clap(short, long)]
     input: String,
 }
 
@@ -17,7 +17,15 @@ fn fail_test(err: &anyhow::Error) {
     println!("{:?}", err);
 }
 
-fn test_v3ds_scripts(root: &Path) {
+fn get_script_filename(path: &Path) -> String {
+    path.file_name()
+        .unwrap()
+        .to_os_string()
+        .into_string()
+        .unwrap()
+}
+
+fn test_v3_scripts(root: &Path, game: Game) {
     let mut successes = 0;
     let mut failures = 0;
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
@@ -25,16 +33,11 @@ fn test_v3ds_scripts(root: &Path) {
         if !path.is_file() || path.extension().unwrap() != "cmb" {
             continue;
         }
-        let filename = path
-            .file_name()
-            .unwrap()
-            .to_os_string()
-            .into_string()
-            .unwrap();
+        let filename = get_script_filename(path);
         print!("Testing script '{}'... ", filename);
         let raw_file = std::fs::read(path).unwrap();
-        match exalt::disassemble_v3ds(&raw_file) {
-            Ok(functions) => match exalt::gen_v3ds_code(&filename, &functions) {
+        match exalt::pretty_disassemble(&raw_file, game) {
+            Ok(script) => match exalt::pretty_assemble(&script, &filename, game) {
                 Ok(bytes) => {
                     if bytes != raw_file {
                         println!("FAILED! (output mismatch)");
@@ -63,7 +66,7 @@ fn test_v3ds_scripts(root: &Path) {
     );
 }
 
-fn test_vgcn_scripts(root: &Path) {
+fn test_v1_or_v2_scripts(root: &Path, game: Game) {
     let mut successes = 0;
     let mut failures = 0;
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
@@ -71,16 +74,11 @@ fn test_vgcn_scripts(root: &Path) {
         if !path.is_file() || path.extension().unwrap() != "cmb" {
             continue;
         }
-        let filename = path
-            .file_name()
-            .unwrap()
-            .to_os_string()
-            .into_string()
-            .unwrap();
+        let filename = get_script_filename(path);
         print!("Testing script '{}'... ", filename);
         let raw_file = std::fs::read(path).unwrap();
-        match exalt::pretty_disassemble_vgcn(&raw_file) {
-            Ok(script) => match exalt::pretty_assemble_vgcn(&filename, &script) {
+        match exalt::pretty_disassemble(&raw_file, game) {
+            Ok(script) => match exalt::pretty_assemble(&script, &filename, game) {
                 Ok(bytes) => {
                     let expected_table_start = &raw_file[0x24..0x28];
                     let actual_table_start = &bytes[0x24..0x28];
@@ -90,7 +88,7 @@ fn test_vgcn_scripts(root: &Path) {
                         failures += 1;
                         continue;
                     }
-                    match exalt::pretty_disassemble_vgcn(&bytes) {
+                    match exalt::pretty_disassemble(&bytes, game) {
                         Ok(s) => {
                             if s == script {
                                 println!("Success");
@@ -129,14 +127,14 @@ fn main() {
     let args = ExaltTestingArgs::parse();
     let input_path = Path::new(&args.input);
     println!(
-        "Testing scripts at path '{}' for game '{}'.",
+        "Testing scripts at path '{}' for game '{:?}'.",
         input_path.display(),
-        &args.game
+        args.game
     );
-    let game = args.game.to_uppercase();
-    match game.as_str() {
-        "FE10" => test_vgcn_scripts(&input_path),
-        "FE14" => test_v3ds_scripts(&input_path),
-        _ => println!("No tests available for game '{}'.", args.game),
+    match args.game {
+        Game::FE9 | Game::FE10 | Game::FE11 | Game::FE12 => {
+            test_v1_or_v2_scripts(&input_path, args.game)
+        }
+        Game::FE13 | Game::FE14 | Game::FE15 => test_v3_scripts(&input_path, args.game),
     }
 }

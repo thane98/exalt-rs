@@ -56,7 +56,18 @@ pub enum Expression {
     Funcall {
         name: String,
         args: Vec<Expression>,
-    }
+    },
+    VarReference { 
+        identifier: String 
+    },
+    ArrayReference {
+        identifier: String,
+        index: Box<Expression>,
+    },
+    PointerReference {
+        identifier: String,
+        index: Box<Expression>,
+    },
 }
 
 pub enum Statement {
