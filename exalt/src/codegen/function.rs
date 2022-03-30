@@ -47,7 +47,11 @@ fn to_raw_v1_or_v2_with_assembler<T: Assembler>(
         Some(v) => {
             let mut bytes = encode_shift_jis(v)?;
             bytes.push(0);
-            while bytes.len() % 4 != 0 {
+
+            // Pad to the next word.
+            // Unknown prefix goes between the null terminator and the next word,
+            // so it may cover part of the padding.
+            while (bytes.len() + function.unknown_prefix.len()) % 4 != 0 {
                 bytes.push(0);
             }
             bytes
@@ -57,9 +61,9 @@ fn to_raw_v1_or_v2_with_assembler<T: Assembler>(
     let raw_args = V1ArgSerializer::serialize_args(function, text_data)
         .context("Failed to write function arguments.")?;
     let code_address = if name_bytes.is_empty() {
-        (V1_AND_V2_FUNCTION_HEADER_SIZE + raw_args.len()) as u32
+        (V1_AND_V2_FUNCTION_HEADER_SIZE + raw_args.len() + function.unknown_prefix.len()) as u32
     } else {
-        (V1_AND_V2_FUNCTION_HEADER_SIZE + name_bytes.len()) as u32
+        (V1_AND_V2_FUNCTION_HEADER_SIZE + name_bytes.len() + function.unknown_prefix.len()) as u32
     };
     let name_address = if !name_bytes.is_empty() {
         Some(V1_AND_V2_FUNCTION_HEADER_SIZE as u32)
@@ -75,6 +79,9 @@ fn to_raw_v1_or_v2_with_assembler<T: Assembler>(
         function_type: function.function_type,
         arity: function.arity,
         param_count: function.args.len() as u8,
+        unknown: function.unknown,
+        unknown_prefix: function.unknown_prefix.clone(),
+        unknown_suffix: function.unknown_suffix.clone(),
     };
 
     let mut code_gen_state = CodeGenState::new(text_data);
@@ -115,12 +122,14 @@ fn serialize_v1_or_v2_function_data(
     raw.push(header.function_type);
     raw.push(header.arity);
     raw.push(header.param_count);
-    raw.push(0);
+    raw.push(header.unknown);
     raw.extend((function_id as u16).to_le_bytes().iter());
     raw.extend((header.frame_size as u16).to_le_bytes().iter());
     raw.extend_from_slice(&function.name);
     raw.extend_from_slice(&function.args);
+    raw.extend_from_slice(&header.unknown_prefix);
     raw.extend_from_slice(&function.code);
+    raw.extend_from_slice(&header.unknown_suffix);
     Ok(raw)
 }
 
@@ -206,6 +215,9 @@ impl FunctionSerializer for V3FunctionSerializer {
             function_type: function.function_type,
             arity: function.arity,
             param_count: function.args.len() as u8,
+            unknown: function.unknown,
+            unknown_prefix: Vec::new(),
+            unknown_suffix: Vec::new(),
         };
 
         let mut code_gen_state = CodeGenState::new(text_data);

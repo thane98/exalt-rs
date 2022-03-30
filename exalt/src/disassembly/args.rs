@@ -9,7 +9,7 @@ use std::io::Cursor;
 
 pub trait FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         cursor: &mut Cursor<&[u8]>,
         text_data: &[u8],
         function_type: u32,
@@ -60,7 +60,6 @@ lazy_static! {
             ]
         }
     };
-    
     pub static ref FE14_EVENTS: HashMap<u32, Vec<EventArgType>> = {
         hashmap! {
             0x10 => vec![
@@ -234,7 +233,7 @@ fn read_v3_args(
 
 impl FunctionArgsReader for FE9FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         _cursor: &mut Cursor<&[u8]>,
         _text_data: &[u8],
         _function_type: u32,
@@ -244,10 +243,9 @@ impl FunctionArgsReader for FE9FunctionArgsReader {
     }
 }
 
-
 impl FunctionArgsReader for FE10FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         cursor: &mut Cursor<&[u8]>,
         text_data: &[u8],
         function_type: u32,
@@ -264,7 +262,7 @@ impl FunctionArgsReader for FE10FunctionArgsReader {
 
 impl FunctionArgsReader for FE11FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         _cursor: &mut Cursor<&[u8]>,
         _text_data: &[u8],
         _function_type: u32,
@@ -273,11 +271,10 @@ impl FunctionArgsReader for FE11FunctionArgsReader {
         todo!()
     }
 }
-
 
 impl FunctionArgsReader for FE12FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         _cursor: &mut Cursor<&[u8]>,
         _text_data: &[u8],
         _function_type: u32,
@@ -286,11 +283,10 @@ impl FunctionArgsReader for FE12FunctionArgsReader {
         todo!()
     }
 }
-
 
 impl FunctionArgsReader for FE13FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         _cursor: &mut Cursor<&[u8]>,
         _text_data: &[u8],
         _function_type: u32,
@@ -300,10 +296,9 @@ impl FunctionArgsReader for FE13FunctionArgsReader {
     }
 }
 
-
 impl FunctionArgsReader for FE14FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         cursor: &mut Cursor<&[u8]>,
         text_data: &[u8],
         function_type: u32,
@@ -320,7 +315,7 @@ impl FunctionArgsReader for FE14FunctionArgsReader {
 
 impl FunctionArgsReader for FE15FunctionArgsReader {
     fn read_function_args(
-        &self, 
+        &self,
         _cursor: &mut Cursor<&[u8]>,
         _text_data: &[u8],
         _function_type: u32,

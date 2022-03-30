@@ -28,19 +28,26 @@ impl FunctionHeaderReader for V1FunctionHeaderReader {
         let function_type = cursor.read_u8()?;
         let arity = cursor.read_u8()?;
         let param_count = cursor.read_u8()?;
-        let _padding = cursor.read_u8()?;
+        let unknown = cursor.read_u8()?;
         let _id = cursor.read_u16::<LittleEndian>()?;
         let frame_size = cursor.read_u16::<LittleEndian>()?;
-        let args_address = cursor.position() as u32;
+        let args_address = if function_type != 0 && param_count > 0 {
+            Some(cursor.position() as u32)
+        } else {
+            None
+        };
         Ok(RawFunctionHeader {
             name_address: address_or_none(name_address),
             code_address,
             parent_address: address_or_none(parent_address),
-            args_address: Some(args_address),
+            args_address,
             frame_size,
             function_type,
             arity,
             param_count,
+            unknown,
+            unknown_prefix: Vec::new(),
+            unknown_suffix: Vec::new(),
         })
     }
 }
@@ -64,6 +71,9 @@ impl FunctionHeaderReader for V3FunctionHeaderReader {
             function_type,
             arity,
             param_count: if function_type == 0 { 0 } else { arity },
+            unknown: 0,
+            unknown_prefix: Vec::new(),
+            unknown_suffix: Vec::new(),
         })
     }
 }

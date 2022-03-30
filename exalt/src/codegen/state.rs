@@ -15,9 +15,15 @@ pub struct CodeGenLabelEntry {
     pub jumps: Vec<usize>,
 }
 
+pub enum CodeGenTextStrategy {
+    Dynamic,
+    HardCoded,
+}
+
 pub struct CodeGenTextData {
     pub raw_text: Vec<u8>,
     pub offsets: HashMap<String, usize>,
+    pub strategy: CodeGenTextStrategy,
 }
 
 impl<'a> CodeGenState<'a> {
@@ -85,20 +91,34 @@ impl CodeGenTextData {
         CodeGenTextData {
             raw_text: Vec::new(),
             offsets: HashMap::new(),
+            strategy: CodeGenTextStrategy::Dynamic,
+        }
+    }
+
+    pub fn hard_coded(raw_text: Vec<u8>, offsets: HashMap<String, usize>) -> Self {
+        CodeGenTextData {
+            raw_text,
+            offsets,
+            strategy: CodeGenTextStrategy::HardCoded,
         }
     }
 
     pub fn offset(&mut self, text: &str) -> anyhow::Result<usize> {
-        match self.offsets.get(text) {
-            Some(offset) => Ok(*offset),
-            None => {
-                let bytes = encode_shift_jis(text)?;
-                let offset = self.raw_text.len();
-                self.raw_text.extend(bytes.into_iter());
-                self.raw_text.push(0);
-                self.offsets.insert(text.to_owned(), offset);
-                Ok(offset)
-            }
+        match &self.strategy {
+            CodeGenTextStrategy::Dynamic => match self.offsets.get(text) {
+                Some(offset) => Ok(*offset),
+                None => {
+                    let bytes = encode_shift_jis(text)?;
+                    let offset = self.raw_text.len();
+                    self.raw_text.extend(bytes.into_iter());
+                    self.raw_text.push(0);
+                    self.offsets.insert(text.to_owned(), offset);
+                    Ok(offset)
+                }
+            },
+            CodeGenTextStrategy::HardCoded => self.offsets.get(text).map(|a| *a).ok_or_else(|| {
+                anyhow::anyhow!("'{}' does not exist in hard coded text data", text)
+            }),
         }
     }
 

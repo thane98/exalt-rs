@@ -4,14 +4,32 @@ use std::io::Cursor;
 use anyhow::{anyhow, Context, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::common::read_shift_jis_string;
+use crate::common::read_shift_jis_from_cursor;
 use crate::disassembly::resolve_state::ResolveState;
-use crate::{Script, FunctionData, Opcode};
+use crate::{FunctionData, Opcode, Script};
 
 use super::args::FunctionArgsReader;
 use super::code::CodeDisassembler;
 use super::function_header::FunctionHeaderReader;
 use super::header::CmbHeaderReader;
+
+// The FE9/FE10 compiler seems to leave junk between null terminators and the next word boundary.
+// Ex. Name ends at 0x4, we expect 0x5 until 0x8 to be all zeroes, but there is actually non-zero values for some reason.
+// There are no pointers or offsets to this data and loading it is a hassle, so chances are this is unused.
+// We hold on to this data anyways just to be safe.
+fn read_junk_until_word_boundary(cursor: &mut Cursor<&[u8]>) -> Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    let mut has_non_zero_values = false;
+    while cursor.position() % 4 != 0 {
+        let b = cursor.read_u8()?;
+        has_non_zero_values = has_non_zero_values || b != 0;
+        buffer.push(b);
+    }
+    if !has_non_zero_values {
+        buffer.clear();
+    }
+    Ok(buffer)
+}
 
 fn read_function_table(cursor: &mut Cursor<&[u8]>) -> Result<Vec<usize>> {
     let mut addresses: Vec<usize> = Vec::new();
@@ -116,8 +134,9 @@ pub fn disassemble<
                     raw_function
                 ));
             }
+            cursor.set_position(name_address as u64);
             Some(
-                read_shift_jis_string(script, name_address as usize)
+                read_shift_jis_from_cursor(&mut cursor)
                     .context("Failed to read function name.")?,
             )
         } else {
@@ -150,6 +169,10 @@ pub fn disassemble<
             Vec::new()
         };
 
+        // Hack to deal with "junk" data after the name/args in FE9/FE10.
+        // Doesn't seem like it's referenced anywhere, but we preserve it just in case.
+        let prefix = read_junk_until_word_boundary(&mut cursor)?;
+
         // Read the code.
         if raw_function.code_address as usize >= script.len() {
             return Err(anyhow::anyhow!(
@@ -165,6 +188,10 @@ pub fn disassemble<
             )
         })?;
 
+        // Hack to deal with "junk" data after the terminating opcode in FE9/FE10.
+        // Doesn't seem like it's referenced anywhere, but we preserve it just in case.
+        let suffix = read_junk_until_word_boundary(&mut cursor)?;
+
         functions.push(FunctionData {
             function_type: raw_function.function_type,
             arity: raw_function.arity,
@@ -172,6 +199,9 @@ pub fn disassemble<
             name: function_name,
             args,
             code,
+            unknown: raw_function.unknown,
+            unknown_prefix: prefix,
+            unknown_suffix: suffix,
         });
     }
 

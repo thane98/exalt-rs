@@ -34,9 +34,14 @@ impl ArgSerializer for V1ArgSerializer {
                 }
             }
         }
-        while raw.len() % 4 != 0 {
-            raw.push(0);
+
+        // Hack to deal with padding when prefix data is present.
+        if !raw.is_empty() {
+            while (raw.len() + function.unknown_prefix.len()) % 4 != 0 {
+                raw.push(0);
+            }
         }
+
         Ok(raw)
     }
 }

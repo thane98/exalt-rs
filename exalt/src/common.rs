@@ -1,3 +1,6 @@
+use std::io::Cursor;
+
+use byteorder::ReadBytesExt;
 use encoding_rs::SHIFT_JIS;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
@@ -116,6 +119,17 @@ pub struct RawFunctionHeader {
     pub function_type: u8,
     pub arity: u8,
     pub param_count: u8,
+
+    // Unknown byte in FE9/FE10 after type/arity/param_count
+    pub unknown: u8,
+
+    // Appears to be "junk" data between the name's null terminator and opcodes.
+    // Only shows up in FE9/FE10
+    pub unknown_prefix: Vec<u8>,
+
+    // Appears to be "junk" data between the terminating opcode and the next word.
+    // Only shows up in FE9/FE10
+    pub unknown_suffix: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -123,6 +137,9 @@ pub struct FunctionData {
     pub function_type: u8,
     pub arity: u8,
     pub frame_size: usize,
+    pub unknown: u8,
+    pub unknown_prefix: Vec<u8>,
+    pub unknown_suffix: Vec<u8>,
     pub name: Option<String>,
     pub args: Vec<EventArg>,
     pub code: Vec<Opcode>,
@@ -133,9 +150,12 @@ pub struct PrettyFunctionData {
     pub function_type: u8,
     pub arity: u8,
     pub frame_size: usize,
+    pub unknown: u8,
     pub name: Option<String>,
     pub args: Vec<EventArg>,
     pub code: Vec<String>,
+    pub unknown_prefix: Vec<u8>,
+    pub unknown_suffix: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -175,6 +195,25 @@ pub fn read_shift_jis_string(data: &[u8], start: usize) -> anyhow::Result<String
                 start
             ))
         }
+    }
+}
+
+pub fn read_shift_jis_from_cursor(cursor: &mut Cursor<&[u8]>) -> anyhow::Result<String> {
+    let start = cursor.position();
+    let mut buffer = Vec::new();
+    let mut next = cursor.read_u8()?;
+    while next != 0 {
+        buffer.push(next);
+        next = cursor.read_u8()?;
+    }
+    let (v, _, failure) = SHIFT_JIS.decode(&buffer);
+    if !failure {
+        Ok(v.to_string())
+    } else {
+        Err(anyhow::anyhow!(
+            "Malformed shift-jis sequence addr={:X}",
+            start
+        ))
     }
 }
 

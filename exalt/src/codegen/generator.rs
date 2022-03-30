@@ -20,6 +20,7 @@ pub fn generate_script<T: RawHeaderBuilder, U: FunctionSerializer>(
     header_builder: &T,
     function_serializer: &U,
     version_info: &VersionInfo,
+    mut text_data: CodeGenTextData,
 ) -> Result<Vec<u8>> {
     // Build the header.
     let mut raw = header_builder
@@ -29,7 +30,6 @@ pub fn generate_script<T: RawHeaderBuilder, U: FunctionSerializer>(
     // Assemble functions.
     // Can't place them in the output yet since some formats place text data first.
     // Unfortunately, we can't know the size of text data until we assemble every function...
-    let mut text_data = CodeGenTextData::new();
     let mut raw_functions = Vec::new();
     for function in &script.functions {
         raw_functions.push(
@@ -80,7 +80,7 @@ pub fn generate_script<T: RawHeaderBuilder, U: FunctionSerializer>(
         dump_text_data(&mut raw, &text_data);
     }
 
-    // Fix up the header now that we know where text and event sections were placed.
+    // Fix the header now that we know where text and event sections were placed.
     let mut cursor = Cursor::new(&mut raw);
     cursor.set_position(version_info.text_data_pointer_address);
     cursor.write_u32::<LittleEndian>(text_data_address as u32)?;

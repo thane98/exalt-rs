@@ -5,11 +5,7 @@ use crate::Opcode;
 use super::CodeGenState;
 
 pub trait Assembler {
-    fn to_bytes(
-        opcode: &Opcode,
-        bytes: &mut Vec<u8>,
-        state: &mut CodeGenState,
-    ) -> Result<()>;
+    fn to_bytes(opcode: &Opcode, bytes: &mut Vec<u8>, state: &mut CodeGenState) -> Result<()>;
 }
 
 pub struct V1Assembler;
@@ -52,6 +48,8 @@ pub fn write_jump(
     jump_addr: usize,
     opcode: u8,
 ) {
+    // Can't always know the jump length yet, so don't try to figure it out.
+    // We will note the location and backpatch later.
     output.push(opcode);
     state.add_jump(label, jump_addr);
     output.push(0);
@@ -59,11 +57,7 @@ pub fn write_jump(
 }
 
 impl Assembler for V1Assembler {
-    fn to_bytes(
-        opcode: &Opcode,
-        bytes: &mut Vec<u8>,
-        state: &mut CodeGenState,
-    ) -> Result<()> {
+    fn to_bytes(opcode: &Opcode, bytes: &mut Vec<u8>, state: &mut CodeGenState) -> Result<()> {
         let addr = bytes.len();
         match opcode {
             Opcode::Done => bytes.push(0),
@@ -120,6 +114,7 @@ impl Assembler for V1Assembler {
             Opcode::StringEquals => bytes.push(0x35),
             Opcode::StringNotEquals => bytes.push(0x36),
             Opcode::CallById(v) => {
+                // TODO: Does v1 support 16-bit call IDs?
                 bytes.push(0x37);
                 bytes.push(*v as u8);
             }
@@ -149,11 +144,7 @@ impl Assembler for V1Assembler {
 }
 
 impl Assembler for V2Assembler {
-    fn to_bytes(
-        opcode: &Opcode,
-        bytes: &mut Vec<u8>,
-        state: &mut CodeGenState,
-    ) -> Result<()> {
+    fn to_bytes(opcode: &Opcode, bytes: &mut Vec<u8>, state: &mut CodeGenState) -> Result<()> {
         let addr = bytes.len();
         match opcode {
             Opcode::Done => bytes.push(0),
@@ -250,11 +241,7 @@ impl Assembler for V2Assembler {
 }
 
 impl Assembler for V3Assembler {
-    fn to_bytes(
-        opcode: &Opcode,
-        bytes: &mut Vec<u8>,
-        state: &mut CodeGenState,
-    ) -> Result<()> {
+    fn to_bytes(opcode: &Opcode, bytes: &mut Vec<u8>, state: &mut CodeGenState) -> Result<()> {
         let addr = bytes.len();
         match opcode {
             Opcode::Done => bytes.push(0),

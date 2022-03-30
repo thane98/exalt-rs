@@ -517,6 +517,9 @@ pub fn prettify(funcs: &[FunctionData]) -> Vec<PrettyFunctionData> {
             name: f.name.clone(),
             args: f.args.clone(),
             code,
+            unknown: f.unknown,
+            unknown_prefix: f.unknown_prefix.clone(),
+            unknown_suffix: f.unknown_suffix.clone(),
         })
     }
     prettified
@@ -540,6 +543,9 @@ pub fn unprettify(funcs: &[PrettyFunctionData]) -> anyhow::Result<Vec<FunctionDa
             name: f.name.clone(),
             args: f.args.clone(),
             code,
+            unknown: f.unknown,
+            unknown_prefix: f.unknown_prefix.clone(),
+            unknown_suffix: f.unknown_suffix.clone(),
         })
     }
     Ok(unprettified)
