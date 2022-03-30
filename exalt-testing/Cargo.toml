@@ -11,3 +11,5 @@ exalt = { path = "../exalt" }
 clap = "3.0.0-beta.2"
 walkdir = "2"
 anyhow = "1.0"
+encoding_rs = "0.8.28"
+byteorder = "1.4.3"
