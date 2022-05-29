@@ -1,0 +1,9 @@
+[package]
+name = "exalt-lir"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+strum = "0.24.0"
+strum_macros = "0.24.0"

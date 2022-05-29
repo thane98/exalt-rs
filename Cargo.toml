@@ -1,7 +1,13 @@
 [workspace]
 
 members = [
-    "exalt",
+    "exalt-ast",
+    "exalt-assembler",
+    "exalt-build",
 	"exalt-cli",
+    "exalt-compiler",
+    "exalt-decompiler",
+    "exalt-disassembler",
+	"exalt-lir",
     "exalt-testing"
 ]

@@ -1,0 +1,12 @@
+[package]
+name = "exalt-decompiler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0.57"
+derive_more = "0.99.17"
+exalt-ast = { path = "../exalt-ast" }
+exalt-lir = { path = "../exalt-lir" }
+itertools = "0.10.3"

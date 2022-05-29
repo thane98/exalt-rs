@@ -1,0 +1,17 @@
+[package]
+name = "exalt-compiler"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+exalt-lir = { path = "../exalt-lir" }
+exalt-ast = { path = "../exalt-ast" }
+exalt-assembler = { path = "../exalt-assembler" }
+anyhow = "1.0.57"
+codespan-reporting = "0.11.1"
+logos = "0.12.0"
+itertools = "0.10.3"
+indexmap = "1.8.2"
+thiserror = "1.0.31"

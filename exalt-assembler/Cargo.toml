@@ -1,0 +1,11 @@
+[package]
+name = "exalt-assembler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+exalt-lir = { path = "../exalt-lir" }
+anyhow = "1.0.57"
+byteorder = "1.4.3"
+encoding_rs = "0.8.31"
+rustc-hash = "1.1.0"
