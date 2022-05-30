@@ -92,8 +92,8 @@ impl SymbolTable {
         functions.insert("negate".to_owned(), FunctionSymbol::shared("negate".to_owned(), Location::Generated, 1));
         functions.insert("fix".to_owned(), FunctionSymbol::shared("fix".to_owned(), Location::Generated, 1));
         functions.insert("float".to_owned(), FunctionSymbol::shared("float".to_owned(), Location::Generated, 1));
-        functions.insert("streq".to_owned(), FunctionSymbol::shared("negate".to_owned(), Location::Generated, 2));
-        functions.insert("strne".to_owned(), FunctionSymbol::shared("negate".to_owned(), Location::Generated, 2));
+        functions.insert("streq".to_owned(), FunctionSymbol::shared("streq".to_owned(), Location::Generated, 2));
+        functions.insert("strne".to_owned(), FunctionSymbol::shared("strne".to_owned(), Location::Generated, 2));
 
         SymbolTable {
             scopes: vec![Scope::new()],

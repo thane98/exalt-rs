@@ -95,6 +95,16 @@ fn evaluate_const_binary(
         (Literal::Int(l), Operator::BitwiseAnd, Literal::Int(r)) => Ok(Literal::Int(l & r)),
         (Literal::Int(l), Operator::BitwiseOr, Literal::Int(r)) => Ok(Literal::Int(l | r)),
         (Literal::Int(l), Operator::Xor, Literal::Int(r)) => Ok(Literal::Int(l ^ r)),
+        (Literal::Int(l), Operator::LogicalOr, Literal::Int(r)) => Ok(if l != 0 || r != 0 {
+            Literal::Int(1)
+        } else {
+            Literal::Int(0)
+        }),
+        (Literal::Int(l), Operator::LogicalAnd, Literal::Int(r)) => Ok(if l != 0 && r != 0 {
+            Literal::Int(1)
+        } else {
+            Literal::Int(0)
+        }),
         (Literal::Float(l), Operator::FloatAdd, Literal::Float(r)) => Ok(Literal::Float(l + r)),
         (Literal::Float(l), Operator::FloatSubtract, Literal::Float(r)) => {
             Ok(Literal::Float(l - r))

@@ -1,7 +1,7 @@
 use crate::lexer::{Peekable, Token};
 use crate::reporting::{CompilerLog, ParserError};
 use exalt_ast::surface::{
-    Annotation, ArrayInit, Case, Decl, EnumVariant, Expr, Identifier, Ref, Script, Stmt,
+    Annotation, Case, Decl, EnumVariant, Expr, Identifier, Ref, Script, Stmt,
 };
 use exalt_ast::{FileId, Literal, Location, Notation, Operator, Precedence};
 
@@ -214,8 +214,20 @@ impl<'a, 'source> Parser<'a, 'source> {
         self.consume(Token::Let)?;
         let start_loc = self.location();
         let ident = self.parse_identifier()?;
+        let count = if let Token::LeftBracket = self.peek_token()? {
+            self.consume(Token::LeftBracket)?;
+            let count = self.parse_expression(Precedence::Lowest)?;
+            self.consume(Token::RightBracket)?;
+            Some(count)
+        } else {
+            None
+        };
         self.consume(Token::Semicolon)?;
-        Ok(Decl::Global(self.location().merge(&start_loc), ident))
+        Ok(Decl::Global(
+            self.location().merge(&start_loc),
+            ident,
+            count,
+        ))
     }
 
     fn parse_concrete_stmt(&mut self) -> Result<Stmt> {
@@ -394,8 +406,20 @@ impl<'a, 'source> Parser<'a, 'source> {
         self.consume(Token::Let)?;
         let start_loc = self.location();
         let identifier = self.parse_identifier()?;
+        let count = if let Token::LeftBracket = self.peek_token()? {
+            self.consume(Token::LeftBracket)?;
+            let count = self.parse_expression(Precedence::Lowest)?;
+            self.consume(Token::RightBracket)?;
+            Some(count)
+        } else {
+            None
+        };
         self.consume(Token::Semicolon)?;
-        Ok(Stmt::VarDecl(self.location().merge(&start_loc), identifier))
+        Ok(Stmt::VarDecl(
+            self.location().merge(&start_loc),
+            identifier,
+            count,
+        ))
     }
 
     fn parse_while(&mut self) -> Result<Stmt> {
@@ -467,8 +491,6 @@ impl<'a, 'source> Parser<'a, 'source> {
                 self.consume(expected)?;
                 let right = if let Token::LeftBracket = self.peek_token()? {
                     self.parse_static_array_init()
-                } else if let Token::Array = self.peek_token()? {
-                    self.parse_empty_array_init()
                 } else {
                     self.parse_expression(Precedence::Lowest)
                 }?;
@@ -483,27 +505,12 @@ impl<'a, 'source> Parser<'a, 'source> {
         }
     }
 
-    fn parse_empty_array_init(&mut self) -> Result<Expr> {
-        self.consume(Token::Array)?;
-        let loc = self.location();
-        self.consume(Token::LeftBracket)?;
-        let count = self.parse_expression(Precedence::Lowest)?;
-        self.consume(Token::RightBracket)?;
-        Ok(Expr::Array(
-            self.location().merge(&loc),
-            ArrayInit::Empty(Box::new(count)),
-        ))
-    }
-
     fn parse_static_array_init(&mut self) -> Result<Expr> {
         self.consume(Token::LeftBracket)?;
         let loc = self.location();
         let values = self.parse_comma_separated_expressions(Token::RightBracket)?;
         self.consume(Token::RightBracket)?;
-        Ok(Expr::Array(
-            self.location().merge(&loc),
-            ArrayInit::Static(values),
-        ))
+        Ok(Expr::Array(self.location().merge(&loc), values))
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> Result<Expr> {

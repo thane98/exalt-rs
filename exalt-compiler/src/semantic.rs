@@ -4,8 +4,8 @@ use crate::eval::{evaluate_const_expr, evaluate_enum_access};
 use crate::reporting::{CompilerLog, SemanticError, WarningMessage};
 use crate::symbol::{SymbolTable, Variable};
 use exalt_ast::{
-    Annotation, ArrayInit, Case, ConstSymbol, DataType, Decl, EnumSymbol, Expr, FunctionSymbol,
-    LabelSymbol, Literal, Location, Notation, Operator, Ref, Script, Shared, Stmt, VarSymbol,
+    Annotation, Case, ConstSymbol, DataType, Decl, EnumSymbol, Expr, FunctionSymbol, LabelSymbol,
+    Literal, Location, Notation, Operator, Ref, Script, Shared, Stmt, VarSymbol,
 };
 
 use exalt_ast::surface::{self, EnumVariant, Identifier};
@@ -86,7 +86,9 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
                     parameters,
                     body: _,
                 } => self.define_simple_function(identifier, parameters),
-                surface::Decl::Global(_, identifier) => self.define_global(identifier),
+                surface::Decl::Global(_, identifier, count) => {
+                    self.define_global(identifier, count.as_ref())
+                }
                 _ => {}
             }
         }
@@ -154,11 +156,37 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
         }
     }
 
-    fn define_global(&mut self, identifier: &Identifier) {
+    fn define_global(&mut self, identifier: &Identifier, count: Option<&surface::Expr>) {
         let mut symbol =
             VarSymbol::new(identifier.value.clone(), identifier.location.clone(), true);
         symbol.frame_id = Some(self.globals);
-        self.globals += 1;
+        if let Some(count) = count {
+            match evaluate_const_expr(&self.symbol_table, count) {
+                Ok(length) => {
+                    if let Literal::Int(i) = length {
+                        if i < 0 {
+                            self.log.log_error(
+                                SemanticError::NegativeArrayLength(count.location().clone()).into(),
+                            );
+                        }
+                        symbol.array_length = Some(i as usize);
+                        self.globals += i as usize;
+                    } else {
+                        self.log.log_error(
+                            SemanticError::InvalidType(
+                                count.location().clone(),
+                                DataType::Int.name(),
+                                length.data_type().name(),
+                            )
+                            .into(),
+                        );
+                    }
+                }
+                Err(err) => self.log.log_error(err.into()),
+            }
+        } else {
+            self.globals += 1;
+        }
         let symbol = make_shared(symbol);
         let variable = Variable::Var(symbol);
         if let Err(err) = self
@@ -467,7 +495,9 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
                     Ok(Stmt::Return(None))
                 }
             }
-            surface::Stmt::VarDecl(_, ident) => self.evaluate_var_decl(ident),
+            surface::Stmt::VarDecl(_, ident, count) => {
+                self.evaluate_var_decl(ident, count.as_ref())
+            }
             surface::Stmt::While {
                 location: _,
                 condition,
@@ -511,16 +541,35 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
         })
     }
 
-    fn evaluate_var_decl(&mut self, ident: &Identifier) -> Result<Stmt> {
-        let var_symbol = make_shared(VarSymbol::new(
-            ident.value.clone(),
-            ident.location.clone(),
-            false,
-        ));
-        let var = Variable::Var(var_symbol.clone());
+    fn evaluate_var_decl(
+        &mut self,
+        ident: &Identifier,
+        count: Option<&surface::Expr>,
+    ) -> Result<Stmt> {
+        let mut symbol = VarSymbol::new(ident.value.clone(), ident.location.clone(), false);
+        let count = if let Some(count) = count {
+            let length = evaluate_const_expr(&self.symbol_table, count)?;
+            if let Literal::Int(i) = length {
+                if i < 0 {
+                    return Err(SemanticError::NegativeArrayLength(count.location().clone()));
+                }
+                symbol.array_length = Some(i as usize);
+                Some(i as usize)
+            } else {
+                return Err(SemanticError::InvalidType(
+                    count.location().clone(),
+                    DataType::Int.name(),
+                    length.data_type().name(),
+                ));
+            }
+        } else {
+            None
+        };
+        let symbol = make_shared(symbol);
+        let var = Variable::Var(symbol.clone());
         self.symbol_table
             .define_variable(ident.value.clone(), var)?;
-        Ok(Stmt::VarDecl(var_symbol))
+        Ok(Stmt::VarDecl(symbol, count))
     }
 
     fn evaluate_while_loop(
@@ -559,8 +608,15 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
         op: Operator,
         right: &surface::Expr,
     ) -> Result<Stmt> {
-        if let Operator::Assign = op {
-            self.set_up_assignment_lhs(reference, matches!(right, surface::Expr::Array(_, _)))?;
+        if op == Operator::Assign && matches!(reference, surface::Ref::Var(_)) {
+            self.declare_variable(
+                location,
+                reference,
+                match right {
+                    surface::Expr::Array(_, elements) => Some(elements.len()),
+                    _ => None,
+                },
+            )?;
         }
         let expr = self.evaluate_reference(reference)?;
         match expr {
@@ -573,31 +629,30 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
         }
     }
 
-    fn set_up_assignment_lhs(&mut self, reference: &surface::Ref, array: bool) -> Result<()> {
+    fn declare_variable(
+        &mut self,
+        location: &Location,
+        reference: &surface::Ref,
+        array_length: Option<usize>,
+    ) -> Result<Shared<VarSymbol>> {
         let id = match reference {
             surface::Ref::Var(id) => id,
-            surface::Ref::Index(id, _) => id,
-            surface::Ref::Dereference(id, _) => id,
+            _ => panic!(),
         };
-        if self.symbol_table.lookup_variable(&id.value).is_none() {
-            self.symbol_table.define_variable(
-                id.value.clone(),
-                Variable::Var(make_shared(VarSymbol::new(
-                    id.value.clone(),
-                    id.location.clone(),
-                    false,
-                ))),
-            )?;
-        }
-        if let Some(Variable::Var(symbol)) = self.symbol_table.lookup_variable(&id.value) {
-            let mut symbol = symbol.borrow_mut();
-            symbol.array = array;
-            symbol.assignments += 1;
-            if symbol.array && symbol.assignments > 1 {
-                return Err(SemanticError::ArrayReassignment(id.clone()));
+        if let Some(symbol) = self.symbol_table.lookup_variable(&id.value) {
+            if let Variable::Var(symbol) = symbol {
+                Ok(symbol)
+            } else {
+                Err(SemanticError::ExpectedReferenceOperand(location.clone()))
             }
+        } else {
+            let mut symbol = VarSymbol::new(id.value.clone(), id.location.clone(), false);
+            symbol.array_length = array_length;
+            let symbol = make_shared(symbol);
+            self.symbol_table
+                .define_variable(id.value.clone(), Variable::Var(symbol.clone()))?;
+            Ok(symbol)
         }
-        Ok(())
     }
 
     // Why doesn't this return Result<Stmt>?
@@ -671,7 +726,13 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
 
     fn evaluate_expr(&mut self, expr: &surface::Expr) -> Result<Expr> {
         match expr {
-            surface::Expr::Array(_, arr) => self.evaluate_array_init(arr),
+            surface::Expr::Array(_, values) => {
+                let mut evaluated = Vec::new();
+                for v in values {
+                    evaluated.push(self.evaluate_expr(v)?);
+                }
+                Ok(Expr::Array(evaluated))
+            }
             surface::Expr::Literal(_, literal) => Ok(Expr::Literal(literal.clone())),
             surface::Expr::EnumAccess(_, name, variant) => Ok(Expr::Literal(evaluate_enum_access(
                 &self.symbol_table,
@@ -717,28 +778,6 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
             }
             surface::Expr::AddressOf(location, reference) => {
                 self.evaluate_address_of(location, reference)
-            }
-        }
-    }
-
-    fn evaluate_array_init(&mut self, arr: &surface::ArrayInit) -> Result<Expr> {
-        match arr {
-            surface::ArrayInit::Empty(count) => {
-                match evaluate_const_expr(&self.symbol_table, count)? {
-                    Literal::Int(count) => Ok(Expr::Array(ArrayInit::Empty(count as usize))),
-                    l => Err(SemanticError::InvalidType(
-                        count.location().clone(),
-                        DataType::Int.name(),
-                        l.data_type().name(),
-                    )),
-                }
-            }
-            surface::ArrayInit::Static(values) => {
-                let mut evaluated = Vec::new();
-                for v in values {
-                    evaluated.push(self.evaluate_expr(v)?);
-                }
-                Ok(Expr::Array(ArrayInit::Static(evaluated)))
             }
         }
     }

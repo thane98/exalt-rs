@@ -138,6 +138,7 @@ fn compile(game: Game, input: PathBuf, output: PathBuf, includes: Vec<PathBuf>) 
             name: script_name.to_string(),
             contents: input,
         },
+        text_data: None,
     };
     match exalt_compiler::compile(&request) {
         Ok((raw, log)) => {

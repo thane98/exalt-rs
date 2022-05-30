@@ -201,7 +201,7 @@ pub enum SemanticError {
     SignatureDisagreement(Location, String),
     BadArgCount(Location, usize, usize),
     BadExlCall(Location),
-    ArrayReassignment(Identifier),
+    NegativeArrayLength(Location),
 }
 
 impl SemanticError {
@@ -267,9 +267,9 @@ impl SemanticError {
                 )),
             SemanticError::BadBreak(l) => Diagnostic::error()
                 .with_message("break cannot be used in this context")
-                .with_labels(option_to_vec(
-                    primary(l).map(|v| v.with_message("break can only be used inside a loop or match statement")),
-                )),
+                .with_labels(option_to_vec(primary(l).map(|v| {
+                    v.with_message("break can only be used inside a loop or match statement")
+                }))),
             SemanticError::BadContinue(l) => Diagnostic::error()
                 .with_message("continue cannot be used in this context")
                 .with_labels(option_to_vec(
@@ -309,14 +309,11 @@ impl SemanticError {
                 .with_labels(option_to_vec(
                     primary(l).map(|v| v.with_message("missing call id")),
                 )),
-            SemanticError::ArrayReassignment(id) => Diagnostic::error()
-                .with_message("an array variable cannot have multiple assignments")
-                .with_labels(option_to_vec(primary(&id.location).map(|v| {
-                    v.with_message(format!(
-                        "array variable '{}' has multiple assignments",
-                        &id.value
-                    ))
-                }))),
+            SemanticError::NegativeArrayLength(l) => Diagnostic::error()
+                .with_message("array length cannot be negative")
+                .with_labels(option_to_vec(
+                    primary(l).map(|v| v.with_message("array length cannot be negative")),
+                )),
         }
     }
 }

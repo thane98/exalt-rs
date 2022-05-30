@@ -7,6 +7,7 @@ mod semantic;
 mod symbol;
 
 pub use codegen::CodeGenerationError;
+use exalt_assembler::CodeGenTextData;
 use exalt_lir::Game;
 use itertools::Itertools;
 pub use lexer::{Peekable, Token};
@@ -26,6 +27,7 @@ pub struct CompileRequest {
     pub game: Game,
     pub includes: Vec<SourceFile>,
     pub target: SourceFile,
+    pub text_data: Option<CodeGenTextData>,
 }
 
 pub struct SourceFile {
@@ -69,7 +71,12 @@ pub fn compile(request: &CompileRequest) -> Result<(Vec<u8>, CompilerLog), Compi
     };
 
     // Generate code
-    match codegen::serialize(&request.target.name, &script, request.game) {
+    match codegen::serialize(
+        &request.target.name,
+        &script,
+        request.game,
+        request.text_data.as_ref().cloned(),
+    ) {
         Ok(raw) => Ok((raw, log)),
         Err(err) => Err(CompilerError::CodeGenerationError(err)),
     }

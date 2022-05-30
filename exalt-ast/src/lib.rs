@@ -350,11 +350,9 @@ pub struct VarSymbol {
     pub location: Location,
     pub global: bool,
     #[new(default)]
-    pub array: bool,
-    #[new(default)]
     pub frame_id: Option<usize>,
     #[new(default)]
-    pub assignments: usize,
+    pub array_length: Option<usize>,
 }
 
 /// Exalt l-values
@@ -365,17 +363,10 @@ pub enum Ref {
     Dereference(Shared<VarSymbol>, Option<Box<Expr>>),
 }
 
-/// An expression that initializes a new array
-#[derive(Debug, Clone)]
-pub enum ArrayInit {
-    Empty(usize),
-    Static(Vec<Expr>),
-}
-
 /// Exalt expressions after semantic analysis
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Array(ArrayInit),
+    Array(Vec<Expr>),
     Literal(Literal),
     Grouped(Box<Expr>),
     Unary(Operator, Box<Expr>),
@@ -425,7 +416,7 @@ pub enum Stmt {
     },
     Printf(Vec<Expr>),
     Return(Option<Expr>),
-    VarDecl(Shared<VarSymbol>),
+    VarDecl(Shared<VarSymbol>, Option<usize>),
     While {
         condition: Expr,
         body: Box<Stmt>,

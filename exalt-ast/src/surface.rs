@@ -16,16 +16,10 @@ pub enum Ref {
     Dereference(Identifier, Option<Box<Expr>>),
 }
 
-#[derive(Debug)]
-pub enum ArrayInit {
-    Empty(Box<Expr>),
-    Static(Vec<Expr>),
-}
-
 /// Raw representation of an expression
 #[derive(Debug)]
 pub enum Expr {
-    Array(Location, ArrayInit),
+    Array(Location, Vec<Expr>),
     Literal(Location, Literal),
     EnumAccess(Location, Identifier, Identifier),
     Unary(Location, Box<Expr>, Operator),
@@ -97,7 +91,7 @@ pub enum Stmt {
     },
     Printf(Location, Vec<Expr>),
     Return(Location, Option<Expr>),
-    VarDecl(Location, Identifier),
+    VarDecl(Location, Identifier, Option<Expr>),
     While {
         location: Location,
         condition: Expr,
@@ -142,7 +136,7 @@ pub enum Decl {
         parameters: Vec<Identifier>,
         body: Stmt,
     },
-    Global(Location, Identifier),
+    Global(Location, Identifier, Option<Expr>),
     Callback {
         location: Location,
         annotations: Vec<Annotation>,

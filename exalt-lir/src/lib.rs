@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 
-#[derive(Debug, Clone, Copy, EnumString, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, EnumString, Deserialize, Serialize, PartialEq)]
 pub enum Game {
     FE9,
     FE10,

@@ -1,8 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use exalt_ast::{
-    Annotation, ArrayInit, Decl, Expr, Literal, Notation, Operator, Ref, Script, Stmt,
-};
+use exalt_assembler::CodeGenTextData;
+use exalt_ast::{Annotation, Decl, Expr, Literal, Notation, Operator, Ref, Script, Stmt};
 use exalt_lir::{CallbackArg, Game, Opcode, RawScript};
 
 use thiserror::Error;
@@ -78,7 +77,6 @@ fn to_opcode(op: Operator) -> Opcode {
     }
 }
 
-/// Ugly way of determining whether to write l-value or r-value opcodes
 enum ValueCategory {
     LValue,
     RValue,
@@ -91,10 +89,11 @@ struct CodeGenerator {
     continue_labels: Vec<String>,
     break_labels: Vec<String>,
     assigned_variables: HashSet<String>,
+    game: Game,
 }
 
 impl CodeGenerator {
-    pub fn serialize(script: &Script) -> Result<RawScript> {
+    pub fn serialize(script: &Script, game: Game) -> Result<RawScript> {
         let mut functions = Vec::new();
         let mut generator = CodeGenerator {
             function_to_call_id: CodeGenerator::generate_function_to_call_id(script),
@@ -103,6 +102,7 @@ impl CodeGenerator {
             continue_labels: Vec::new(),
             break_labels: Vec::new(),
             assigned_variables: HashSet::new(),
+            game,
         };
         for decl in &script.decls {
             functions.push(generator.generate_function_data(decl)?);
@@ -151,7 +151,13 @@ impl CodeGenerator {
                 let mut code = Vec::new();
                 self.convert_stmt_to_opcodes(&mut code, body)?;
                 if config.default_return {
-                    code.push(Opcode::ReturnFalse);
+                    match self.game {
+                        Game::FE9 => {
+                            code.push(Opcode::IntLoad(0));
+                            code.push(Opcode::Return);
+                        }
+                        _ => code.push(Opcode::ReturnFalse),
+                    }
                 }
                 let symbol = symbol.borrow();
                 Ok(RawFunction {
@@ -161,10 +167,21 @@ impl CodeGenerator {
                     unknown: config.unknown_value,
                     prefix: config.prefix,
                     suffix: config.suffix,
-                    name: if symbol.name.contains("::") {
-                        Some(symbol.name.clone())
-                    } else {
-                        None
+                    name: match self.game {
+                        Game::FE9 | Game::FE10 | Game::FE11 | Game::FE12 => {
+                            if symbol.name.contains("anonfn") {
+                                None
+                            } else {
+                                Some(symbol.name.clone())
+                            }
+                        }
+                        Game::FE13 | Game::FE14 | Game::FE15 => {
+                            if symbol.name.contains("::") {
+                                Some(symbol.name.clone())
+                            } else {
+                                None
+                            }
+                        }
                     },
                     args: Vec::new(),
                     code,
@@ -188,11 +205,20 @@ impl CodeGenerator {
                 let mut code = Vec::new();
                 self.convert_stmt_to_opcodes(&mut code, body)?;
                 if config.default_return {
-                    code.push(Opcode::ReturnFalse);
+                    match self.game {
+                        Game::FE9 | Game::FE10 | Game::FE11 | Game::FE12 => {
+                            code.push(Opcode::IntLoad(0));
+                            code.push(Opcode::Return);
+                        }
+                        Game::FE13 | Game::FE14 | Game::FE15 => code.push(Opcode::ReturnFalse),
+                    }
                 }
                 Ok(RawFunction {
                     event: *event_type as u8,
-                    arity: args.len() as u8,
+                    arity: match self.game {
+                        Game::FE9 | Game::FE10 | Game::FE11 | Game::FE12 => 0,
+                        Game::FE13 | Game::FE14 | Game::FE15 => args.len() as u8,
+                    },
                     frame_size: self.frame_size,
                     unknown: config.unknown_value,
                     prefix: config.prefix,
@@ -230,18 +256,25 @@ impl CodeGenerator {
                 if let Operator::Assign = op {
                     let frame_id = self.process_assignment_lhs(left, right)?;
                     match right {
-                        Expr::Array(ArrayInit::Empty(_)) => {}
-                        Expr::Array(ArrayInit::Static(values)) => {
+                        Expr::Array(values) => {
                             for (i, value) in values.iter().enumerate() {
                                 opcodes.push(Opcode::VarAddr((frame_id + i) as u16));
                                 self.convert_expr_to_opcodes(opcodes, value)?;
-                                opcodes.push(Opcode::Assign);
+                                opcodes.push(if self.game == Game::FE9 {
+                                    Opcode::CompleteAssign
+                                } else {
+                                    Opcode::Assign
+                                });
                             }
                         }
                         _ => {
                             self.convert_ref_to_opcodes(opcodes, left, ValueCategory::LValue)?;
                             self.convert_expr_to_opcodes(opcodes, right)?;
-                            opcodes.push(Opcode::Assign);
+                            opcodes.push(if self.game == Game::FE9 {
+                                Opcode::CompleteAssign
+                            } else {
+                                Opcode::Assign
+                            });
                         }
                     }
 
@@ -252,7 +285,11 @@ impl CodeGenerator {
                     opcodes.push(Opcode::Dereference);
                     self.convert_expr_to_opcodes(opcodes, right)?;
                     opcodes.push(to_opcode(op));
-                    opcodes.push(Opcode::Assign);
+                    opcodes.push(if self.game == Game::FE9 {
+                        Opcode::CompleteAssign
+                    } else {
+                        Opcode::Assign
+                    });
                     Ok(())
                 }
             }
@@ -391,9 +428,9 @@ impl CodeGenerator {
                 Some(v) => {
                     match v {
                         Expr::Literal(Literal::Int(i)) => {
-                            if *i == 0 {
+                            if *i == 0 && self.game != Game::FE9 {
                                 opcodes.push(Opcode::ReturnFalse);
-                            } else if *i == 1 {
+                            } else if *i == 1 && self.game != Game::FE9 {
                                 opcodes.push(Opcode::ReturnTrue);
                             } else {
                                 self.convert_expr_to_opcodes(opcodes, v)?;
@@ -413,9 +450,9 @@ impl CodeGenerator {
                     Ok(())
                 }
             },
-            Stmt::VarDecl(symbol) => {
+            Stmt::VarDecl(symbol, count) => {
                 symbol.borrow_mut().frame_id = Some(self.frame_size);
-                self.frame_size += 1;
+                self.frame_size += count.unwrap_or(1);
                 Ok(())
             }
             Stmt::While { condition, body } => {
@@ -451,16 +488,15 @@ impl CodeGenerator {
             if symbol.frame_id.is_none() {
                 symbol.frame_id = Some(self.frame_size);
                 match right {
-                    Expr::Array(ArrayInit::Empty(count)) => self.frame_size += count,
-                    Expr::Array(ArrayInit::Static(elements)) => { 
+                    Expr::Array(elements) => {
                         self.frame_size += elements.len();
-                    },
+                    }
                     _ => self.frame_size += 1,
                 }
             }
             self.assigned_variables.insert(symbol.name.clone());
         }
-        
+
         Ok(symbol.frame_id.unwrap())
     }
 
@@ -609,9 +645,18 @@ impl CodeGenerator {
     }
 }
 
-pub fn serialize(script_name: &str, script: &Script, game: Game) -> Result<Vec<u8>> {
-    let script_binary = CodeGenerator::serialize(script)?;
-    let raw = exalt_assembler::assemble(&script_binary, script_name, game)
-        .map_err(|err| CodeGenerationError::BadAssembly(format!("{:?}", err)))?;
-    Ok(raw)
+pub fn serialize(
+    script_name: &str,
+    script: &Script,
+    game: Game,
+    text_data: Option<CodeGenTextData>,
+) -> Result<Vec<u8>> {
+    let script_binary = CodeGenerator::serialize(script, game)?;
+    let result = match text_data {
+        Some(td) => {
+            exalt_assembler::assemble_with_hard_coding(&script_binary, script_name, game, td)
+        }
+        None => exalt_assembler::assemble(&script_binary, script_name, game),
+    };
+    result.map_err(|err| CodeGenerationError::BadAssembly(format!("{:?}", err)))
 }

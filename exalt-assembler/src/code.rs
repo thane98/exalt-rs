@@ -108,7 +108,6 @@ fn serialize_gcn_opcode(
         Opcode::StringEquals => bytes.push(0x35),
         Opcode::StringNotEquals => bytes.push(0x36),
         Opcode::CallById(v) => {
-            // TODO: Does v1 support 16-bit call IDs?
             bytes.push(0x37);
             bytes.push(*v as u8);
         }
