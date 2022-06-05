@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
@@ -7,22 +9,29 @@ use exalt_ast::{FileId, Location, Operator};
 
 /// Aggregator for issues found while compiling
 #[derive(Debug)]
-pub struct CompilerLog<'source> {
+pub struct CompilerLog {
     pub errors: Vec<ErrorMessage>,
     pub warnings: Vec<WarningMessage>,
-    pub files: SimpleFiles<&'source str, &'source str>,
+    pub files: SimpleFiles<String, String>,
+    next_file_id: usize,
 }
 
-impl<'source> CompilerLog<'source> {
+impl CompilerLog {
     pub fn new() -> Self {
         CompilerLog {
             errors: Vec::new(),
             warnings: Vec::new(),
             files: SimpleFiles::new(),
+            next_file_id: 0,
         }
     }
 
-    pub fn add(&mut self, name: &'source str, source: &'source str) -> FileId {
+    pub fn peek_file_id(&self) -> FileId {
+        self.next_file_id
+    }
+
+    pub fn add(&mut self, name: String, source: String) -> FileId {
+        self.next_file_id += 1;
         self.files.add(name, source)
     }
 
@@ -56,7 +65,7 @@ impl<'source> CompilerLog<'source> {
     }
 }
 
-impl<'source> Default for CompilerLog<'source> {
+impl<'source> Default for CompilerLog {
     fn default() -> Self {
         Self::new()
     }
@@ -106,6 +115,10 @@ pub enum ParserError {
     ExpectedDecl(Location),
     MultipleDefaultCases(Location, Location),
     DoubleDereference(Location),
+    ExpectedIncludePathComponent(Location),
+    PathNormalizationError(Location, PathBuf),
+    IncludeNotFound(Location),
+    IncludeError(Location),
 }
 
 impl ParserError {
@@ -177,6 +190,26 @@ impl ParserError {
                 .with_message("Exalt does not support double dereferences")
                 .with_labels(option_to_vec(
                     primary(l).map(|v| v.with_message("attempted to dereference twice")),
+                )),
+            ParserError::ExpectedIncludePathComponent(l) => Diagnostic::error()
+                .with_message("expected include path component")
+                .with_labels(option_to_vec(
+                    primary(l).map(|v| v.with_message("expected include path component")),
+                )),
+            ParserError::PathNormalizationError(l, p) => Diagnostic::error()
+                .with_message(format!("unable to normalize path {}", p.display()))
+                .with_labels(option_to_vec(primary(l).map(|v| {
+                    v.with_message("unable to normalize path")
+                }))),
+            ParserError::IncludeNotFound(l) => Diagnostic::error()
+                .with_message("unable to resolve path")
+                .with_labels(option_to_vec(primary(l).map(|v| {
+                    v.with_message("could not find this file")
+                }))),
+            ParserError::IncludeError(l) => Diagnostic::error()
+                .with_message("undefined include error")
+                .with_labels(option_to_vec(
+                    primary(l).map(|v| v.with_message("undefined include error")),
                 )),
         }
     }

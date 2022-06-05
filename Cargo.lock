@@ -172,18 +172,25 @@ dependencies = [
 name = "exalt-build"
 version = "0.1.0"
 dependencies = [
- "anyhow",
+ "clap",
+ "exalt-ast",
+ "exalt-compiler",
+ "exalt-decompiler",
+ "exalt-disassembler",
  "exalt-lir",
  "serde",
  "toml",
+ "walkdir",
 ]
 
 [[package]]
 name = "exalt-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "exalt-assembler",
+ "exalt-ast",
  "exalt-compiler",
  "exalt-decompiler",
  "exalt-disassembler",
@@ -207,6 +214,7 @@ dependencies = [
  "indexmap",
  "itertools",
  "logos",
+ "normpath",
  "thiserror",
 ]
 
@@ -248,6 +256,7 @@ dependencies = [
 name = "exalt-testing"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "byteorder",
  "clap",
  "encoding_rs",
@@ -360,6 +369,15 @@ name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
+
+[[package]]
+name = "normpath"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04aaf5e9cb0fbf883cc0423159eacdf96a9878022084b35c462c428cab73bcaf"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "os_str_bytes"

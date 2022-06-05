@@ -115,6 +115,10 @@ pub enum Token {
     AtSign,
     #[token(".")]
     Dot,
+    #[token("..")]
+    DotDot,
+    #[token("alias")]
+    Alias,
     #[token("array")]
     Array,
     #[token("break")]
@@ -135,6 +139,8 @@ pub enum Token {
     For,
     #[token("goto")]
     Goto,
+    #[token("include")]
+    Include,
     #[token("if")]
     If,
     #[token("label")]
@@ -232,6 +238,8 @@ impl Display for Token {
                 Token::Arrow => "->",
                 Token::AtSign => "@",
                 Token::Dot => ".",
+                Token::DotDot => "..",
+                Token::Alias => "alias",
                 Token::Array => "array",
                 Token::Break => "break",
                 Token::Callback => "callback",
@@ -242,6 +250,7 @@ impl Display for Token {
                 Token::For => "for",
                 Token::Def => "func",
                 Token::Goto => "goto",
+                Token::Include => "include",
                 Token::If => "if",
                 Token::Label => "label",
                 Token::Let => "let",

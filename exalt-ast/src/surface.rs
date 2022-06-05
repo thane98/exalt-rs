@@ -116,6 +116,12 @@ pub struct EnumVariant {
     pub value: Expr,
 }
 
+#[derive(Debug)]
+pub enum IncludePathComponent {
+    Node(String),
+    Parent,
+}
+
 /// Raw representation of declarations
 #[derive(Debug)]
 pub enum Decl {
@@ -143,6 +149,15 @@ pub enum Decl {
         event_type: Expr,
         args: Vec<Expr>,
         body: Stmt,
+    },
+    Include {
+        location: Location,
+        path: Vec<IncludePathComponent>,
+    },
+    FunctionAlias {
+        location: Location,
+        identifier: Identifier,
+        alias: Identifier,
     },
 }
 

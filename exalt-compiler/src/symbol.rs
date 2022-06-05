@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
+use crate::reporting::SemanticError;
 use exalt_ast::{
     ConstSymbol, EnumSymbol, FunctionSymbol, LabelSymbol, Location, Shared, VarSymbol,
 };
-use crate::reporting::SemanticError;
+use itertools::Itertools;
 
 type Result<T> = std::result::Result<T, SemanticError>;
 
 /// We group const/var because they can be used at the same points in expressions
 #[derive(Debug, Clone)]
-pub(crate) enum Variable {
+pub enum Variable {
     Const(Shared<ConstSymbol>),
     Var(Shared<VarSymbol>),
 }
@@ -79,26 +80,43 @@ impl Scope {
 const FUNCTION_SCOPE: usize = 1;
 
 /// Data structure for all symbols in the current context
-pub(crate) struct SymbolTable {
+pub struct SymbolTable {
     scopes: Vec<Scope>,
     enums: HashMap<String, Shared<EnumSymbol>>,
     functions: HashMap<String, Shared<FunctionSymbol>>,
+    aliases: HashMap<String, (Location, String)>,
 }
 
 impl SymbolTable {
     pub fn new() -> Self {
         // Set up built in functions
         let mut functions = HashMap::new();
-        functions.insert("negate".to_owned(), FunctionSymbol::shared("negate".to_owned(), Location::Generated, 1));
-        functions.insert("fix".to_owned(), FunctionSymbol::shared("fix".to_owned(), Location::Generated, 1));
-        functions.insert("float".to_owned(), FunctionSymbol::shared("float".to_owned(), Location::Generated, 1));
-        functions.insert("streq".to_owned(), FunctionSymbol::shared("streq".to_owned(), Location::Generated, 2));
-        functions.insert("strne".to_owned(), FunctionSymbol::shared("strne".to_owned(), Location::Generated, 2));
+        functions.insert(
+            "negate".to_owned(),
+            FunctionSymbol::shared("negate".to_owned(), Location::Generated, 1, None),
+        );
+        functions.insert(
+            "fix".to_owned(),
+            FunctionSymbol::shared("fix".to_owned(), Location::Generated, 1, None),
+        );
+        functions.insert(
+            "float".to_owned(),
+            FunctionSymbol::shared("float".to_owned(), Location::Generated, 1, None),
+        );
+        functions.insert(
+            "streq".to_owned(),
+            FunctionSymbol::shared("streq".to_owned(), Location::Generated, 2, None),
+        );
+        functions.insert(
+            "strne".to_owned(),
+            FunctionSymbol::shared("strne".to_owned(), Location::Generated, 2, None),
+        );
 
         SymbolTable {
             scopes: vec![Scope::new()],
             enums: HashMap::new(),
             functions,
+            aliases: HashMap::new(),
         }
     }
 
@@ -146,6 +164,24 @@ impl SymbolTable {
         self.scopes[FUNCTION_SCOPE].define_label(name, symbol)
     }
 
+    pub fn define_alias(&mut self, name: String, alias: String, location: Location) -> Result<()> {
+        match self.aliases.get(&name) {
+            Some((original_location, _)) => Err(SemanticError::SymbolRedefinition(
+                original_location.clone(),
+                location,
+                name,
+            )),
+            None => {
+                self.aliases.insert(name, (location, alias));
+                Ok(())
+            }
+        }
+    }
+
+    pub fn lookup_alias(&self, name: &str) -> Option<&(Location, String)> {
+        self.aliases.get(name)
+    }
+
     pub fn lookup_enum(&self, name: &str) -> Option<Shared<EnumSymbol>> {
         self.enums.get(name).cloned()
     }
@@ -165,5 +201,31 @@ impl SymbolTable {
 
     pub fn lookup_label(&self, name: &str) -> Option<Shared<LabelSymbol>> {
         self.scopes[FUNCTION_SCOPE].lookup_label(name)
+    }
+
+    pub fn constants(&self) -> Vec<Shared<ConstSymbol>> {
+        self.scopes[0]
+            .variables
+            .values()
+            .filter(|v| matches!(v, Variable::Const(_)))
+            .map(|v| match v {
+                Variable::Const(c) => c.clone(),
+                _ => panic!(),
+            })
+            .collect_vec()
+    }
+
+    pub fn aliases(&self) -> HashMap<String, String> {
+        self.aliases
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, v.1))
+            .collect()
+    }
+}
+
+impl Default for SymbolTable {
+    fn default() -> Self {
+        Self::new()
     }
 }

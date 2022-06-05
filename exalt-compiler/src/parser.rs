@@ -1,7 +1,7 @@
 use crate::lexer::{Peekable, Token};
 use crate::reporting::{CompilerLog, ParserError};
 use exalt_ast::surface::{
-    Annotation, Case, Decl, EnumVariant, Expr, Identifier, Ref, Script, Stmt,
+    Annotation, Case, Decl, EnumVariant, Expr, Identifier, IncludePathComponent, Ref, Script, Stmt,
 };
 use exalt_ast::{FileId, Literal, Location, Notation, Operator, Precedence};
 
@@ -11,11 +11,11 @@ type Result<T> = std::result::Result<T, ParserError>;
 struct Parser<'a, 'source: 'a> {
     file_id: FileId,
     lex: Peekable<'source>,
-    log: &'a mut CompilerLog<'source>,
+    log: &'a mut CompilerLog,
 }
 
 impl<'a, 'source> Parser<'a, 'source> {
-    pub fn new(file_id: FileId, source: &'source str, log: &'a mut CompilerLog<'source>) -> Self {
+    pub fn new(file_id: FileId, source: &'source str, log: &'a mut CompilerLog) -> Self {
         Parser {
             file_id,
             lex: Peekable::new(source),
@@ -54,9 +54,11 @@ impl<'a, 'source> Parser<'a, 'source> {
 
     fn parse_decl(&mut self) -> Result<Decl> {
         match self.peek_token()? {
+            Token::Alias => self.parse_alias(),
             Token::Const => self.parse_const(),
             Token::Enum => self.parse_enum(),
             Token::Let => self.parse_global(),
+            Token::Include => self.parse_include(),
             Token::AtSign | Token::Def | Token::Callback => {
                 let annotations = self.parse_annotations()?;
                 match self.peek_token()? {
@@ -98,6 +100,44 @@ impl<'a, 'source> Parser<'a, 'source> {
             identifier,
             args,
         ))
+    }
+
+    fn parse_include(&mut self) -> Result<Decl> {
+        self.consume(Token::Include)?;
+        let loc = self.location();
+        let mut path = Vec::new();
+        loop {
+            match self.next_token()? {
+                Token::Identifier => {
+                    path.push(IncludePathComponent::Node(self.lex.slice().to_owned()))
+                }
+                Token::DotDot => path.push(IncludePathComponent::Parent),
+                _ => return Err(ParserError::ExpectedIncludePathComponent(self.location())),
+            }
+            match self.next_token()? {
+                Token::Colon => {}
+                Token::Semicolon => break,
+                _ => return Err(ParserError::ExpectedIncludePathComponent(self.location())),
+            }
+        }
+        Ok(Decl::Include {
+            location: self.location().merge(&loc),
+            path,
+        })
+    }
+
+    fn parse_alias(&mut self) -> Result<Decl> {
+        self.consume(Token::Alias)?;
+        self.consume(Token::Def)?;
+        let identifier = self.parse_identifier()?;
+        self.consume(Token::Arrow)?;
+        let alias = self.parse_identifier()?;
+        self.consume(Token::Semicolon)?;
+        Ok(Decl::FunctionAlias {
+            location: self.location().merge(&identifier.location),
+            identifier,
+            alias,
+        })
     }
 
     fn parse_const(&mut self) -> Result<Decl> {
@@ -876,11 +916,6 @@ impl<'a, 'source> Parser<'a, 'source> {
     }
 }
 
-pub fn parse<'a, 'source>(
-    file_id: FileId,
-    source: &'source str,
-    log: &'a mut CompilerLog<'source>,
-) -> Script {
-    let mut parser = Parser::new(file_id, source, log);
-    parser.parse_script()
+pub fn parse(file_id: FileId, source: &str, log: &mut CompilerLog) -> Script {
+    Parser::new(file_id, source, log).parse_script()
 }

@@ -25,7 +25,11 @@ impl<'a> ExprStack<'a> {
 
     pub fn pop_args(&mut self, count: usize) -> Result<Vec<Expr<'a>>> {
         if self.stack.len() < count {
-            bail!("wanted to pop '{}' expressions but stack size is '{}'", count, self.stack.len())
+            bail!(
+                "wanted to pop '{}' expressions but stack size is '{}'",
+                count,
+                self.stack.len()
+            )
         } else {
             Ok(self.stack.split_off(self.stack.len() - count))
         }
@@ -188,7 +192,10 @@ impl VarTracker {
         Ok(())
     }
 
-    pub fn build_declaration_requests(&self) -> Vec<DeclarationRequest> {
+    pub fn build_declaration_requests(
+        &self,
+        include_static_arrays: bool,
+    ) -> Vec<DeclarationRequest> {
         let mut requests = Vec::new();
         let mut i = 0;
         while i < self.meta_data.len() {
@@ -201,7 +208,9 @@ impl VarTracker {
                 requests.push(DeclarationRequest::Var(i));
                 i += 1;
             } else {
-                requests.push(DeclarationRequest::Array(i, array_length));
+                if include_static_arrays {
+                    requests.push(DeclarationRequest::Array(i, array_length));
+                }
                 i += array_length;
             }
         }

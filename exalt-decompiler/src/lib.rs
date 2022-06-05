@@ -8,7 +8,7 @@ use exalt_ast::{Notation, Operator, Precedence};
 use exalt_lir::{CallbackArg, Function, Game, Opcode, RawScript};
 
 mod data_structures;
-mod ir;
+pub mod ir;
 mod refining;
 mod transform;
 
@@ -53,6 +53,7 @@ impl<'a> DecompilerState<'a> {
 pub fn decompile(
     script: &RawScript,
     transform: Option<IrTransform>,
+    includes: Vec<String>,
     game: Game,
     debug: bool,
 ) -> Result<String> {
@@ -83,9 +84,9 @@ pub fn decompile(
     }
     let mut script = Script(decls);
     global_var_tracker.find_empty_array_inits()?;
-    let extra_declarations = global_var_tracker.build_declaration_requests();
+    let extra_declarations = global_var_tracker.build_declaration_requests(true);
     refining::inject_global_var_declarations(&mut script, &extra_declarations);
-    ir::pretty_print(&script, &ir_transform)
+    ir::pretty_print(&script, &ir_transform, &includes)
 }
 
 fn decompile_function<'a>(
@@ -124,22 +125,19 @@ fn decompile_function<'a>(
         function.frame_size,
         global_var_tracker,
     )?;
-    // TODO: Make it possible to reassign arrays in the compiler so we can take this step out
-    if !debug {
-        refining::collapse_static_array_inits(&mut block, &mut var_info)?;
-    }
+    refining::collapse_static_array_inits(&mut block, &mut var_info)?;
     var_info.find_empty_array_inits()?;
     let local_var_declarations = if debug {
         // In debug mode, we declare every variable at the top of the function.
         // This is useful for debugging/testing because it makes sure every variable
         // gets an identical frame index during a round trip.
-        var_info.build_declaration_requests()
+        var_info.build_declaration_requests(true)
     } else {
         // Under normal conditions, var declarations are noisy and don't add anything to the source.
         // Variables may receive different frame indices during compiling, but the resulting
         // script is functionally identical.
         var_info
-            .build_declaration_requests()
+            .build_declaration_requests(false)
             .into_iter()
             .filter(|r| !matches!(r, DeclarationRequest::Var(_)))
             .collect_vec()

@@ -68,8 +68,8 @@ enum Event {
     // Configures a terrain interaction.
     // * `x`: x coordinate of the tile
     // * `y`: y coordinate of the tile
-    // * `state`: Interaction state? Needs research.
-    // * `unknown`: unknown int
+    // * `width`: width of the interactable area
+    // * `unknown`: height of the interactable area
     // * `type`: Type of terrain event. Needs investigation / documentation. 0 = destructible, 1 = village, 11 = DV, 12 = terrain?
     // * `int_arg_1`: Value varies based on the interaction type.
     // * `int_arg_2`: Value varies based on the interaction type.
@@ -109,6 +109,13 @@ enum Event {
     // * `flag`: Function or flag that determines whether this callback should run.
     BattleTalk = 24,
 
+    // Triggered after a unit dies. Need to see where this runs vs. "Instant Die".
+    // * `character1`: PID of the character whose death should trigger the event.
+    // * `unknown`: unknown int
+    // * `character2`: PID of the character who must be in the battle when character1 dies.
+    // * `unknown`: unknown int
+    Die = 27,
+
     // Triggered after a unit dies. Need to see where this runs after the battle sequence.
     // * `character`: PID of the character that should trigger the callback.
     // * `unknown`: unknown
@@ -138,7 +145,7 @@ enum Event {
 
     // Triggered to set where the dragon vein "shoot" effect should go.
     // This is set inside the callback using ev::TrickSetDragonFocus(x, y)
-    DragonVeinShoot,
+    DragonVeinShoot = 34,
 
     // Triggered to initialize a map for a skirmish.
     MapSettingEncount = 35,

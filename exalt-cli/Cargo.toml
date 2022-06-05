@@ -10,9 +10,11 @@ exalt-assembler = { path = "../exalt-assembler" }
 exalt-disassembler = { path = "../exalt-disassembler" }
 exalt-decompiler = { path = "../exalt-decompiler" }
 exalt-compiler = { path = "../exalt-compiler" }
+exalt-ast = { path = "../exalt-ast" }
 exalt-lir = { path = "../exalt-lir" }
 ron = { version = "0.7.0", features = ["indexmap"] }
 serde_json = "1.0.81"
 serde_yaml = "0.8.24"
 strum = "0.24.0"
 strum_macros = "0.24.0"
+anyhow = "1.0.57"

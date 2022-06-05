@@ -19,9 +19,9 @@ fn make_shared<T>(value: T) -> Rc<RefCell<T>> {
     Rc::new(RefCell::new(value))
 }
 
-struct SemanticAnalyzer<'a, 'source> {
+struct SemanticAnalyzer<'a> {
     symbol_table: SymbolTable,
-    log: &'a mut CompilerLog<'source>,
+    log: &'a mut CompilerLog,
 
     // This is used to track contexts where either a break or continue can be used
     // These must be separate because in certain contexts (ex. match statements) you
@@ -38,8 +38,8 @@ struct SemanticAnalyzer<'a, 'source> {
     globals: usize,
 }
 
-impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
-    pub fn new(log: &'a mut CompilerLog<'source>) -> Self {
+impl<'a> SemanticAnalyzer<'a> {
+    fn new(log: &'a mut CompilerLog) -> Self {
         SemanticAnalyzer {
             symbol_table: SymbolTable::new(),
             log,
@@ -50,16 +50,21 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
         }
     }
 
-    pub fn analyze(&mut self, script: &surface::Script) -> Option<Script> {
+    pub fn analyze(
+        log: &mut CompilerLog,
+        script: &surface::Script,
+    ) -> Option<(Script, SymbolTable)> {
+        let mut analyzer = SemanticAnalyzer::new(log);
+
         // Fill in type definitions and forward declare functions
-        self.create_definitions(script);
+        analyzer.create_definitions(script);
         // End it here if there are errors since we don't handle bad types/functions gracefully yet.
-        if !self.log.has_errors() {
-            let script = self.transform_to_ast(script);
-            if self.log.has_errors() {
+        if !analyzer.log.has_errors() {
+            let script = analyzer.transform_to_ast(script);
+            if analyzer.log.has_errors() {
                 None
             } else {
-                Some(script)
+                Some((script, analyzer.symbol_table))
             }
         } else {
             None
@@ -69,6 +74,19 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
     fn create_definitions(&mut self, script: &surface::Script) {
         for decl in &script.0 {
             match decl {
+                surface::Decl::FunctionAlias {
+                    location: _,
+                    identifier,
+                    alias,
+                } => {
+                    if let Err(err) = self.symbol_table.define_alias(
+                        identifier.value.clone(),
+                        alias.value.clone(),
+                        identifier.location.clone(),
+                    ) {
+                        self.log.log_error(err.into());
+                    }
+                }
                 surface::Decl::Constant {
                     location: _,
                     identifier,
@@ -202,6 +220,7 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
             identifier.value.clone(),
             identifier.location.clone(),
             params.len(),
+            None,
         ));
         if let Err(err) = self
             .symbol_table
@@ -794,6 +813,7 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
                 ident.value.clone(),
                 ident.location.clone(),
                 args.len(),
+                None,
             ));
             self.symbol_table
                 .define_function(ident.value.clone(), symbol.clone())?;
@@ -881,7 +901,6 @@ impl<'a, 'source> SemanticAnalyzer<'a, 'source> {
     }
 }
 
-pub fn analyze(script: &surface::Script, log: &mut CompilerLog) -> Option<Script> {
-    let mut analyzer = SemanticAnalyzer::new(log);
-    analyzer.analyze(script)
+pub fn analyze(script: &surface::Script, log: &mut CompilerLog) -> Option<(Script, SymbolTable)> {
+    SemanticAnalyzer::analyze(log, script)
 }

@@ -97,8 +97,14 @@ impl<'a> Decl<'a> {
 
 pub struct Script<'a>(pub Vec<Decl<'a>>);
 
-pub fn pretty_print(script: &Script, transform: &IrTransform) -> Result<String> {
+pub fn pretty_print(script: &Script, transform: &IrTransform, includes: &[String]) -> Result<String> {
     let mut sb = String::new();
+    for inc in includes {
+        writeln!(sb, "include {};", inc)?;
+    }
+    if !includes.is_empty() {
+        sb.push('\n');
+    }
     let (vars, functions): (Vec<&Decl>, Vec<&Decl>) = script.0.iter().partition(|d| matches!(d, Decl::GlobalVarDecl(_, _)));
     for decl in &vars {
         pretty_print_decl(&mut sb, decl, transform)?;
@@ -121,7 +127,13 @@ fn pretty_print_decl(sb: &mut String, decl: &Decl, transform: &IrTransform) -> R
                 pretty_print_annotation(sb, annotation)?;
                 sb.push('\n');
             }
-            write!(sb, "callback[{}](", event)?;
+            sb.push_str("callback[");
+            if let Some(name) = transform.transform_event((*event).into()) {
+                write!(sb, "{}", name)?;
+            } else {
+                write!(sb, "0x{:X}", event)?;
+            }
+            sb.push_str("](");
             for (i, arg) in args.iter().enumerate() {
                 pretty_print_literal(sb, arg, transform)?;
                 if i + 1 < args.len() {

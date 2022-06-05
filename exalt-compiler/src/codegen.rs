@@ -6,6 +6,8 @@ use exalt_lir::{CallbackArg, Game, Opcode, RawScript};
 
 use thiserror::Error;
 
+use crate::symbol::SymbolTable;
+
 type RawFunction = exalt_lir::Function;
 type Result<T> = std::result::Result<T, CodeGenerationError>;
 
@@ -82,7 +84,8 @@ enum ValueCategory {
     RValue,
 }
 
-struct CodeGenerator {
+struct CodeGenerator<'a> {
+    symbol_table: &'a SymbolTable,
     function_to_call_id: HashMap<String, usize>,
     next_label: usize,
     frame_size: usize,
@@ -92,10 +95,11 @@ struct CodeGenerator {
     game: Game,
 }
 
-impl CodeGenerator {
-    pub fn serialize(script: &Script, game: Game) -> Result<RawScript> {
+impl<'a> CodeGenerator<'a> {
+    pub fn serialize(script: &Script, symbol_table: &SymbolTable, game: Game) -> Result<RawScript> {
         let mut functions = Vec::new();
         let mut generator = CodeGenerator {
+            symbol_table,
             function_to_call_id: CodeGenerator::generate_function_to_call_id(script),
             next_label: 0,
             frame_size: 0,
@@ -171,13 +175,23 @@ impl CodeGenerator {
                         Game::FE9 | Game::FE10 | Game::FE11 | Game::FE12 => {
                             if symbol.name.contains("anonfn") {
                                 None
+                            } else if let Some((_, alias)) =
+                                self.symbol_table.lookup_alias(&symbol.name)
+                            {
+                                Some(alias.clone())
                             } else {
                                 Some(symbol.name.clone())
                             }
                         }
                         Game::FE13 | Game::FE14 | Game::FE15 => {
                             if symbol.name.contains("::") {
-                                Some(symbol.name.clone())
+                                if let Some((_, alias)) =
+                                    self.symbol_table.lookup_alias(&symbol.name)
+                                {
+                                    Some(alias.clone())
+                                } else {
+                                    Some(symbol.name.clone())
+                                }
                             } else {
                                 None
                             }
@@ -550,8 +564,14 @@ impl CodeGenerator {
                             opcodes.push(Opcode::CallById(*id));
                         }
                         None => {
-                            opcodes
-                                .push(Opcode::CallByName(symbol.name.clone(), symbol.arity as u8));
+                            let resolved_name = if let Some((_, alias)) =
+                                self.symbol_table.lookup_alias(&symbol.name)
+                            {
+                                alias.clone()
+                            } else {
+                                symbol.name.clone()
+                            };
+                            opcodes.push(Opcode::CallByName(resolved_name, symbol.arity as u8));
                         }
                     },
                 }
@@ -648,10 +668,11 @@ impl CodeGenerator {
 pub fn serialize(
     script_name: &str,
     script: &Script,
+    symbol_table: &SymbolTable,
     game: Game,
     text_data: Option<CodeGenTextData>,
 ) -> Result<Vec<u8>> {
-    let script_binary = CodeGenerator::serialize(script, game)?;
+    let script_binary = CodeGenerator::serialize(script, symbol_table, game)?;
     let result = match text_data {
         Some(td) => {
             exalt_assembler::assemble_with_hard_coding(&script_binary, script_name, game, td)

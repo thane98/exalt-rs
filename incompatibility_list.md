@@ -21,12 +21,17 @@ The assembler should work if the compiler fails.
 
 ## FE13
 - bev.cmb
+    - Functionally equivalent, text is reordered
 - bev_shared.cmb
+    - Functionally equivalent, text is reordered
 - Command.cmb
+    - Functionally equivalent, text is reordered
 
 ## FE14 (Base Game)
 - bev.cmb
+    - Functionally equivalent, text is reordered
 - Command.cmb
+    - Functionally equivalent, text is reordered
 
 ## FE14 (DLC)
 - Heirs of Fate 4 terrain script
@@ -36,5 +41,8 @@ The assembler should work if the compiler fails.
 
 ## FE15
 - bev.cmb
+    - Functionally equivalent, text is reordered
 - Command.cmb
+    - Functionally equivalent, text is reordered
 - GMAP.cmb
+    - Functionally equivalent, text is reordered

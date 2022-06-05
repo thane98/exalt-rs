@@ -509,6 +509,7 @@ pub fn collapse_static_array_inits(stmt: &mut Stmt, vars: &mut VarTracker) -> Re
                     // Have at least 2 elements, so we can make an array!
                     let elements = contents.drain(base..i).collect_vec();
                     contents.insert(base, create_static_array_init(elements, vars)?);
+                    i = base + 1;
                 }
             }
         }

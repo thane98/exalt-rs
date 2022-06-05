@@ -322,14 +322,16 @@ pub struct FunctionSymbol {
     pub name: String,
     pub location: Location,
     pub arity: usize,
+    pub alias: Option<String>,
 }
 
 impl FunctionSymbol {
-    pub fn shared(name: String, location: Location, arity: usize) -> Shared<FunctionSymbol> {
+    pub fn shared(name: String, location: Location, arity: usize, alias: Option<String>) -> Shared<FunctionSymbol> {
         Rc::new(RefCell::new(FunctionSymbol {
             name,
             location,
             arity,
+            alias,
         }))
     }
 }

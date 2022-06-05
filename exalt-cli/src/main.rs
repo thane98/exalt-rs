@@ -1,4 +1,6 @@
-use exalt_compiler::{CompileRequest, CompilerError, SourceFile};
+use anyhow::Context;
+use exalt_ast::Literal;
+use exalt_compiler::{CompileRequest, ParseRequest};
 use exalt_decompiler::IrTransform;
 use std::path::PathBuf;
 use strum_macros::EnumString;
@@ -50,109 +52,127 @@ enum Commands {
         output: PathBuf,
 
         #[clap(short, long)]
-        transform: Option<PathBuf>,
-
-        #[clap(short, long)]
         debug: bool,
     },
     Compile {
         input: PathBuf,
 
         #[clap(short, long)]
-        output: PathBuf,
-
-        #[clap(short, long)]
-        include: Vec<PathBuf>,
+        output: Option<PathBuf>,
     },
 }
 
-fn disassemble(game: Game, input: PathBuf, output: PathBuf, format: Format) {
-    let input = std::fs::read(input).expect("failed to read input file");
+fn disassemble(game: Game, input: PathBuf, output: PathBuf, format: Format) -> anyhow::Result<()> {
+    let input = std::fs::read(input).context("failed to read input file")?;
     let script =
-        exalt_disassembler::disassemble(&input, game).expect("failed to disassemble script");
+        exalt_disassembler::disassemble(&input, game).context("failed to disassemble script")?;
     let raw = match format {
-        Format::Json => serde_json::to_string_pretty(&script).expect("error serializing script"),
-        Format::Yml => serde_yaml::to_string(&script).expect("error serializing script"),
+        Format::Json => {
+            serde_json::to_string_pretty(&script).context("error serializing script")?
+        }
+        Format::Yml => serde_yaml::to_string(&script).context("error serializing script")?,
         Format::Ron => ron::ser::to_string_pretty(&script, ron::ser::PrettyConfig::new())
-            .expect("error serializing script"),
+            .context("error serializing script")?,
     };
-    std::fs::write(output, raw).expect("error writing script to disk");
+    std::fs::write(output, raw).context("error writing script to disk")?;
+    Ok(())
 }
 
-fn assemble(game: Game, input: PathBuf, output: PathBuf, format: Format) {
-    let input = std::fs::read(input).expect("failed to read input file");
+fn assemble(game: Game, input: PathBuf, output: PathBuf, format: Format) -> anyhow::Result<()> {
+    let input = std::fs::read(input).context("failed to read input file")?;
     let script_name = output
         .file_name()
-        .expect("failed to parse file name")
+        .context("failed to parse file name")?
         .to_string_lossy();
     let script: RawScript = match format {
-        Format::Json => serde_json::from_slice(&input).expect("failed to parse script"),
-        Format::Yml => serde_yaml::from_slice(&input).expect("failed to parse script"),
+        Format::Json => serde_json::from_slice(&input).context("failed to parse script")?,
+        Format::Yml => serde_yaml::from_slice(&input).context("failed to parse script")?,
         Format::Ron => {
-            let text = String::from_utf8(input).expect("failed to read input as utf8");
-            ron::from_str(&text).expect("failed to parse script")
+            let text = String::from_utf8(input).context("failed to read input as utf8")?;
+            ron::from_str(&text).context("failed to parse script")?
         }
     };
-    let raw =
-        exalt_assembler::assemble(&script, &script_name, game).expect("failed to assemble script");
-    std::fs::write(output, raw).expect("error writing cmb to disk");
+    let raw = exalt_assembler::assemble(&script, &script_name, game)
+        .context("failed to assemble script")?;
+    std::fs::write(output, raw).context("error writing cmb to disk")?;
+    Ok(())
 }
 
-fn decompile(game: Game, input: PathBuf, output: PathBuf, transform: Option<PathBuf>, debug: bool) {
-    let input = std::fs::read(input).expect("failed to read input file");
-    let transform: Option<IrTransform> = if let Some(path) = transform {
-        let raw = std::fs::read(path).expect("failed to read transform file");
-        serde_yaml::from_slice(&raw).expect("failed to parse transform file")
-    } else {
-        None
+fn load_decompiler_transform(game: Game) -> anyhow::Result<Option<IrTransform>> {
+    let exe_dir = std::env::current_exe()?
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("current exe has no parent dir"))?
+        .to_path_buf();
+    let target = match game {
+        Game::FE14 => Some("std/fe14/prelude.exl"),
+        _ => None,
     };
-    let script =
-        exalt_disassembler::disassemble(&input, game).expect("failed to disassemble script");
-    let script = exalt_decompiler::decompile(&script, transform, game, debug)
-        .expect("failed to decompile script");
-    std::fs::write(output, script).expect("failed writing output to disk");
-}
+    if let Some(target) = target {
+        // Load std lib files
+        let path = exe_dir.join(target);
+        if !path.is_file() {
+            println!(
+                "WARNING: could not find std library at path '{}'",
+                path.display()
+            );
+            return Ok(None);
+        }
+        let (_, symbol_table) = exalt_compiler::parse(&ParseRequest { game, target: path })?;
 
-fn compile(game: Game, input: PathBuf, output: PathBuf, includes: Vec<PathBuf>) {
-    let input = std::fs::read_to_string(input).expect("failed to read input file");
-    let script_name = output
-        .file_name()
-        .expect("failed to parse file name")
-        .to_string_lossy();
-    let request = CompileRequest {
-        game,
-        includes: includes
-            .into_iter()
-            .map(|p| {
-                let contents = std::fs::read_to_string(&p)
-                    .unwrap_or_else(|_| panic!("failed to read include file '{}'", p.display()));
-                let name = p
-                    .file_name()
-                    .expect("failed to parse include file name")
-                    .to_string_lossy()
-                    .to_string();
-                SourceFile { name, contents }
-            })
-            .collect(),
-        target: SourceFile {
-            name: script_name.to_string(),
-            contents: input,
-        },
-        text_data: None,
-    };
-    match exalt_compiler::compile(&request) {
-        Ok((raw, log)) => {
-            std::fs::write(output, raw).expect("failed to write cmb to disk");
-            if log.has_warnings() {
-                log.print();
+        // Populate the transform from the symbol table
+        let mut transform = IrTransform::default();
+        for constant in symbol_table.constants() {
+            let c = constant.borrow();
+            if let Literal::Str(s) = &c.value {
+                transform.strings.insert(s.clone(), c.name.clone());
             }
         }
-        Err(CompilerError::ParseError(log)) => log.print(),
-        Err(err) => println!("{}", err),
+        for (k, v) in symbol_table.aliases() {
+            // Flip because aliases are key=friendly name, value=internal name
+            transform.functions.insert(v, k);
+        }
+        if let Some(symbol) = symbol_table.lookup_enum("Event") {
+            let e = symbol.borrow();
+            for (name, variant) in &e.variants {
+                if let Literal::Int(i) = &variant.value {
+                    transform
+                        .events
+                        .insert(*i as usize, format!("Event.{}", name));
+                }
+            }
+        }
+        return Ok(Some(transform));
     }
+    Ok(None)
 }
 
-fn main() {
+fn decompile(game: Game, input: PathBuf, output: PathBuf, debug: bool) -> anyhow::Result<()> {
+    let input = std::fs::read(input).context("failed to read input file")?;
+    let transform = load_decompiler_transform(game)?;
+    let includes = match (game, &transform) {
+        (Game::FE14, Some(_)) => vec!["std:fe14:prelude".to_owned()],
+        _ => Vec::new(),
+    };
+    let script =
+        exalt_disassembler::disassemble(&input, game).context("failed to disassemble script")?;
+    let script = exalt_decompiler::decompile(&script, transform, includes, game, debug)
+        .context("failed to decompile script")?;
+    std::fs::write(output, script).context("failed to write output file")?;
+    Ok(())
+}
+
+fn compile(game: Game, target: PathBuf, output: Option<PathBuf>) -> anyhow::Result<()> {
+    let request = CompileRequest {
+        game,
+        target,
+        output,
+        text_data: None,
+    };
+    exalt_compiler::compile(&request)?;
+    Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let game = args.game;
     match args.command {
@@ -169,13 +189,8 @@ fn main() {
         Commands::Decompile {
             input,
             output,
-            transform,
             debug,
-        } => decompile(game, input, output, transform, debug),
-        Commands::Compile {
-            input,
-            output,
-            include,
-        } => compile(game, input, output, include),
+        } => decompile(game, input, output, debug),
+        Commands::Compile { input, output } => compile(game, input, output),
     }
 }
