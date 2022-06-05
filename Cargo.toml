@@ -3,7 +3,6 @@
 members = [
     "exalt-ast",
     "exalt-assembler",
-    "exalt-build",
 	"exalt-cli",
     "exalt-compiler",
     "exalt-decompiler",
