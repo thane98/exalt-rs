@@ -49,7 +49,7 @@ enum Commands {
         input: PathBuf,
 
         #[clap(short, long)]
-        output: PathBuf,
+        output: Option<PathBuf>,
 
         #[clap(short, long)]
         debug: bool,
@@ -104,6 +104,7 @@ fn load_decompiler_transform(game: Game) -> anyhow::Result<Option<IrTransform>> 
         .ok_or_else(|| anyhow::anyhow!("current exe has no parent dir"))?
         .to_path_buf();
     let target = match game {
+        Game::FE10 => Some("std/fe10/prelude.exl"),
         Game::FE14 => Some("std/fe14/prelude.exl"),
         _ => None,
     };
@@ -146,22 +147,42 @@ fn load_decompiler_transform(game: Game) -> anyhow::Result<Option<IrTransform>> 
     Ok(None)
 }
 
-fn decompile(game: Game, input: PathBuf, output: PathBuf, debug: bool) -> anyhow::Result<()> {
-    let input = std::fs::read(input).context("failed to read input file")?;
+fn decompile(
+    game: Game,
+    input: PathBuf,
+    output: Option<PathBuf>,
+    debug: bool,
+) -> anyhow::Result<()> {
+    let raw = std::fs::read(&input).context("failed to read input file")?;
     let transform = load_decompiler_transform(game)?;
     let includes = match (game, &transform) {
+        (Game::FE10, Some(_)) => vec!["std:fe10:prelude".to_owned()],
         (Game::FE14, Some(_)) => vec!["std:fe14:prelude".to_owned()],
         _ => Vec::new(),
     };
     let script =
-        exalt_disassembler::disassemble(&input, game).context("failed to disassemble script")?;
+        exalt_disassembler::disassemble(&raw, game).context("failed to disassemble script")?;
     let script = exalt_decompiler::decompile(&script, transform, includes, game, debug)
         .context("failed to decompile script")?;
-    std::fs::write(output, script).context("failed to write output file")?;
+    let output_path = if let Some(path) = output {
+        path
+    } else {
+        let mut path: PathBuf = input
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("input file has no file name"))?
+            .into();
+        path.set_extension("exl");
+        path
+    };
+    std::fs::write(output_path, script).context("failed to write output file")?;
     Ok(())
 }
 
-fn compile(game: Game, target: PathBuf, output: Option<PathBuf>) -> anyhow::Result<()> {
+fn compile(
+    game: Game,
+    target: PathBuf,
+    output: Option<PathBuf>,
+) -> anyhow::Result<()> {
     let request = CompileRequest {
         game,
         target,

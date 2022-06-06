@@ -133,31 +133,33 @@ fn test_v3_scripts_full(root: &Path, game: Game) -> anyhow::Result<()> {
         print!("Testing script '{}'... ", filename);
         let raw_file = std::fs::read(path)?;
         match exalt_disassembler::disassemble(&raw_file, game) {
-            Ok(script) => match exalt_decompiler::decompile(&script, None, Vec::new(), game, true) {
-                Ok(contents) => {
-                    match exalt_compiler::compile_to_vec(&build_compile_request(
-                        filename, contents, game, None,
-                    )?) {
-                        Ok(bytes) => {
-                            if bytes != raw_file {
-                                println!("FAILED! (output mismatch)");
+            Ok(script) => {
+                match exalt_decompiler::decompile(&script, None, Vec::new(), game, true) {
+                    Ok(contents) => {
+                        match exalt_compiler::compile_to_vec(&build_compile_request(
+                            filename, contents, game, None,
+                        )?) {
+                            Ok(bytes) => {
+                                if bytes != raw_file {
+                                    println!("FAILED! (output mismatch)");
+                                    failures += 1;
+                                } else {
+                                    println!("Success");
+                                    successes += 1;
+                                }
+                            }
+                            Err(err) => {
+                                fail_test(err);
                                 failures += 1;
-                            } else {
-                                println!("Success");
-                                successes += 1;
                             }
                         }
-                        Err(err) => {
-                            fail_test(err);
-                            failures += 1;
-                        }
+                    }
+                    Err(err) => {
+                        fail_test(&*err);
+                        failures += 1;
                     }
                 }
-                Err(err) => {
-                    fail_test(&*err);
-                    failures += 1;
-                }
-            },
+            }
             Err(err) => {
                 fail_test(&*err);
                 failures += 1;
@@ -231,34 +233,36 @@ fn test_v1_or_v2_scripts_full(root: &Path, game: Game) -> anyhow::Result<()> {
         let raw_file = std::fs::read(path)?;
         let text_data = extract_v1_text_offsets(&raw_file)?;
         match exalt_disassembler::disassemble(&raw_file, game) {
-            Ok(script) => match exalt_decompiler::decompile(&script, None, Vec::new(), game, true) {
-                Ok(contents) => {
-                    match exalt_compiler::compile_to_vec(&build_compile_request(
-                        filename,
-                        contents,
-                        game,
-                        Some(text_data),
-                    )?) {
-                        Ok(bytes) => {
-                            if bytes != raw_file {
-                                println!("FAILED! (output mismatch)");
+            Ok(script) => {
+                match exalt_decompiler::decompile(&script, None, Vec::new(), game, true) {
+                    Ok(contents) => {
+                        match exalt_compiler::compile_to_vec(&build_compile_request(
+                            filename,
+                            contents,
+                            game,
+                            Some(text_data),
+                        )?) {
+                            Ok(bytes) => {
+                                if bytes != raw_file {
+                                    println!("FAILED! (output mismatch)");
+                                    failures += 1;
+                                } else {
+                                    println!("Success");
+                                    successes += 1;
+                                }
+                            }
+                            Err(err) => {
+                                fail_test(err);
                                 failures += 1;
-                            } else {
-                                println!("Success");
-                                successes += 1;
                             }
                         }
-                        Err(err) => {
-                            fail_test(err);
-                            failures += 1;
-                        }
+                    }
+                    Err(err) => {
+                        fail_test(&*err);
+                        failures += 1;
                     }
                 }
-                Err(err) => {
-                    fail_test(&*err);
-                    failures += 1;
-                }
-            },
+            }
             Err(err) => {
                 fail_test(&*err);
                 failures += 1;

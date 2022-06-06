@@ -541,6 +541,7 @@ fn create_static_array_init<'a>(
     let (_, left, right) = assigns.remove(0).unwrap_assign();
     let frame_id = left.frame_id();
     vars.set_array_length(frame_id.0, assigns.len() + 1)?;
+    vars.mark_static_array(frame_id.0)?;
     let mut elements = vec![right];
     for element in assigns.into_iter() {
         let (_, _, right) = element.unwrap_assign();

@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
-use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+use codespan_reporting::term::{self};
 use exalt_ast::surface::Identifier;
 use exalt_ast::{FileId, Location, Operator};
 
@@ -198,14 +198,14 @@ impl ParserError {
                 )),
             ParserError::PathNormalizationError(l, p) => Diagnostic::error()
                 .with_message(format!("unable to normalize path {}", p.display()))
-                .with_labels(option_to_vec(primary(l).map(|v| {
-                    v.with_message("unable to normalize path")
-                }))),
+                .with_labels(option_to_vec(
+                    primary(l).map(|v| v.with_message("unable to normalize path")),
+                )),
             ParserError::IncludeNotFound(l) => Diagnostic::error()
                 .with_message("unable to resolve path")
-                .with_labels(option_to_vec(primary(l).map(|v| {
-                    v.with_message("could not find this file")
-                }))),
+                .with_labels(option_to_vec(
+                    primary(l).map(|v| v.with_message("could not find this file")),
+                )),
             ParserError::IncludeError(l) => Diagnostic::error()
                 .with_message("undefined include error")
                 .with_labels(option_to_vec(

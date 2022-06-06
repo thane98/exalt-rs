@@ -78,6 +78,7 @@ pub struct VarMetaData {
     pub indexed: bool,
     pub parameter: bool,
     pub array_length: usize,
+    pub static_array: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +123,12 @@ impl VarTracker {
         Ok(())
     }
 
+    pub fn mark_static_array(&mut self, frame_id: usize) -> Result<()> {
+        self.check_index(frame_id)?;
+        self.meta_data[frame_id].static_array = true;
+        Ok(())
+    }
+
     pub fn set_array_length(&mut self, frame_id: usize, length: usize) -> Result<()> {
         self.check_index(frame_id)?;
         self.meta_data[frame_id].array_length = length;
@@ -151,6 +158,11 @@ impl VarTracker {
     pub fn is_parameter(&self, frame_id: usize) -> Result<bool> {
         self.check_index(frame_id)?;
         Ok(self.meta_data[frame_id].parameter)
+    }
+
+    pub fn is_static_array(&self, frame_id: usize) -> Result<bool> {
+        self.check_index(frame_id)?;
+        Ok(self.meta_data[frame_id].static_array)
     }
 
     pub fn get_array_length(&self, frame_id: usize) -> Result<usize> {
@@ -208,7 +220,7 @@ impl VarTracker {
                 requests.push(DeclarationRequest::Var(i));
                 i += 1;
             } else {
-                if include_static_arrays {
+                if !self.is_static_array(i).unwrap_or_default() || include_static_arrays {
                     requests.push(DeclarationRequest::Array(i, array_length));
                 }
                 i += array_length;
