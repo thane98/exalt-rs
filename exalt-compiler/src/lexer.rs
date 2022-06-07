@@ -123,14 +123,16 @@ pub enum Token {
     Array,
     #[token("break")]
     Break,
+    #[token("event")]
     #[token("callback")]
-    Callback,
+    Event,
     #[token("const")]
     Const,
     #[token("continue")]
     Continue,
+    #[token("func")]
     #[token("def")]
-    Def,
+    Func,
     #[token("else")]
     Else,
     #[token("enum")]
@@ -157,9 +159,6 @@ pub enum Token {
     Static,
     #[token("struct")]
     Struct,
-    // This is reserved since it's used internally as a data type
-    #[token("Void")]
-    Void,
     #[token("while")]
     While,
     #[token("yield")]
@@ -173,7 +172,9 @@ pub enum Token {
     #[regex("\"[^\"]*\"")]
     Str,
     #[error]
-    #[regex(r"([ \t\n\r\f]+)|(//[^\n]*)", logos::skip)]
+    #[regex(r"([ \t\n\r\f]+)", logos::skip)]
+    #[regex(r"//(.*)\n", logos::skip)]
+    #[regex(r"#(.*)\n")]
     Error,
 }
 
@@ -242,13 +243,13 @@ impl Display for Token {
                 Token::Alias => "alias",
                 Token::Array => "array",
                 Token::Break => "break",
-                Token::Callback => "callback",
+                Token::Event => "event",
                 Token::Const => "const",
                 Token::Continue => "continue",
                 Token::Else => "else",
                 Token::Enum => "enum",
                 Token::For => "for",
-                Token::Def => "func",
+                Token::Func => "func",
                 Token::Goto => "goto",
                 Token::Include => "include",
                 Token::If => "if",
@@ -259,7 +260,6 @@ impl Display for Token {
                 Token::Struct => "struct",
                 Token::Printf => "printf",
                 Token::Return => "return",
-                Token::Void => "void",
                 Token::While => "while",
                 Token::Yield => "yield",
                 Token::Int => "int",

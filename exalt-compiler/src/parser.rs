@@ -40,7 +40,7 @@ impl<'a, 'source> Parser<'a, 'source> {
     fn skip_to_next_decl(&mut self) {
         while let Some(t) = self.lex.peek() {
             match t {
-                Token::Callback | Token::Def | Token::Enum | Token::Const => break,
+                Token::Event | Token::Func | Token::Enum | Token::Const => break,
                 _ => {
                     self.lex.next();
                 }
@@ -59,11 +59,11 @@ impl<'a, 'source> Parser<'a, 'source> {
             Token::Enum => self.parse_enum(),
             Token::Let => self.parse_global(),
             Token::Include => self.parse_include(),
-            Token::AtSign | Token::Def | Token::Callback => {
+            Token::AtSign | Token::Func | Token::Event => {
                 let annotations = self.parse_annotations()?;
                 match self.peek_token()? {
-                    Token::Def => self.parse_function(annotations),
-                    Token::Callback => self.parse_callback(annotations),
+                    Token::Func => self.parse_function(annotations),
+                    Token::Event => self.parse_callback(annotations),
                     _ => Err(ParserError::ExpectedDecl(self.location())),
                 }
             }
@@ -128,7 +128,7 @@ impl<'a, 'source> Parser<'a, 'source> {
 
     fn parse_alias(&mut self) -> Result<Decl> {
         self.consume(Token::Alias)?;
-        self.consume(Token::Def)?;
+        self.consume(Token::Func)?;
         let identifier = self.parse_identifier()?;
         self.consume(Token::Arrow)?;
         let alias = self.parse_identifier()?;
@@ -190,7 +190,7 @@ impl<'a, 'source> Parser<'a, 'source> {
     }
 
     fn parse_function(&mut self, annotations: Vec<Annotation>) -> Result<Decl> {
-        self.consume(Token::Def)?;
+        self.consume(Token::Func)?;
         let loc = self.location();
         let identifier = self.parse_identifier()?;
         let parameters = self.parse_function_parameters()?;
@@ -228,7 +228,7 @@ impl<'a, 'source> Parser<'a, 'source> {
     }
 
     fn parse_callback(&mut self, annotations: Vec<Annotation>) -> Result<Decl> {
-        self.consume(Token::Callback)?;
+        self.consume(Token::Event)?;
         let loc = self.location();
         self.consume(Token::LeftBracket)?;
         let event_type = self.parse_expression(Precedence::Lowest)?;
