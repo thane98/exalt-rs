@@ -250,8 +250,8 @@ impl<'a> CodeGenerator<'a> {
         for a in annotations {
             match a {
                 Annotation::NoDefaultReturn => config.default_return = false,
-                Annotation::Prefix(v) => config.prefix = v.clone(),
-                Annotation::Suffix(v) => config.suffix = v.clone(),
+                Annotation::Prefix(v) => config.prefix.clone_from(v),
+                Annotation::Suffix(v) => config.suffix.clone_from(v),
                 Annotation::Unknown(v) => config.unknown_value = *v as u8,
             }
         }

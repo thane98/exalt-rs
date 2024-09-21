@@ -76,6 +76,7 @@ fn build_compile_request(
         target: Path::new("tmp.exl").to_path_buf(),
         output: Some(Path::new(&name).to_path_buf()),
         text_data,
+        additional_includes: vec![],
     })
 }
 

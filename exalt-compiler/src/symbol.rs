@@ -25,7 +25,8 @@ impl Variable {
 }
 
 /// Container for symbols within a single scope
-struct Scope {
+#[derive(Default)]
+pub struct Scope {
     variables: HashMap<String, Variable>,
     labels: HashMap<String, Shared<LabelSymbol>>,
 }
@@ -73,6 +74,23 @@ impl Scope {
     pub fn lookup_label(&self, name: &str) -> Option<Shared<LabelSymbol>> {
         self.labels.get(name).map(|l| l.to_owned())
     }
+
+    pub fn labels(&self) -> impl Iterator<Item = &str> {
+        self.labels.keys().map(|s| s.as_str())
+    }
+
+    pub fn variables(&self) -> impl Iterator<Item = (Option<usize>, String)> + '_ {
+        self.variables.values().map(|v| match v {
+            Variable::Const(s) => {
+                let s = s.borrow();
+                (s.location.range().map(|r| r.start), s.name.clone())
+            }
+            Variable::Var(s) => {
+                let s = s.borrow();
+                (s.location.range().map(|r| r.start), s.name.clone())
+            }
+        })
+    }
 }
 
 /// Used to always define labels in the scope of the current function
@@ -82,6 +100,7 @@ const FUNCTION_SCOPE: usize = 1;
 /// Data structure for all symbols in the current context
 pub struct SymbolTable {
     scopes: Vec<Scope>,
+    completed_function_scopes: Vec<Scope>,
     enums: HashMap<String, Shared<EnumSymbol>>,
     functions: HashMap<String, Shared<FunctionSymbol>>,
     aliases: HashMap<String, (Location, String)>,
@@ -114,6 +133,7 @@ impl SymbolTable {
 
         SymbolTable {
             scopes: vec![Scope::new()],
+            completed_function_scopes: Default::default(),
             enums: HashMap::new(),
             functions,
             aliases: HashMap::new(),
@@ -125,7 +145,9 @@ impl SymbolTable {
     }
 
     pub fn close_scope(&mut self) {
-        self.scopes.pop();
+        if let Some(scope) = self.scopes.pop() {
+            self.completed_function_scopes.push(scope);
+        }
     }
 
     pub fn define_enum(&mut self, name: String, symbol: Shared<EnumSymbol>) -> Result<()> {
@@ -221,6 +243,18 @@ impl SymbolTable {
             .into_iter()
             .map(|(k, v)| (k, v.1))
             .collect()
+    }
+
+    pub fn enums(&self) -> Vec<Shared<EnumSymbol>> {
+        self.enums.values().cloned().collect()
+    }
+
+    pub fn functions(&self) -> Vec<Shared<FunctionSymbol>> {
+        self.functions.values().cloned().collect()
+    }
+
+    pub fn completed_scopes(&self) -> &[Scope] {
+        &self.completed_function_scopes
     }
 }
 

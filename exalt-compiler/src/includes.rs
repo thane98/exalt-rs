@@ -33,7 +33,11 @@ fn find_script(path: &[IncludePathComponent], search_paths: &[PathBuf]) -> Optio
     None
 }
 
-fn build_search_paths(location: Location, current_file_path: &Path) -> Result<Vec<PathBuf>> {
+fn build_search_paths(
+    additional_includes: &[PathBuf],
+    location: Location,
+    current_file_path: &Path,
+) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     // Parent dir of the current file
     paths.push(
@@ -58,6 +62,7 @@ fn build_search_paths(location: Location, current_file_path: &Path) -> Result<Ve
             })?
             .into_path_buf(),
     );
+    paths.extend(additional_includes.iter().cloned());
     Ok(paths)
 }
 
@@ -68,8 +73,9 @@ fn pull_in_scripts_recursive(
     log: &mut CompilerLog,
     included_paths: &mut HashSet<PathBuf>,
     scripts: &mut Vec<Script>,
+    additional_includes: &[PathBuf],
 ) -> Result<()> {
-    let search_paths = build_search_paths(location, &path)?;
+    let search_paths = build_search_paths(additional_includes, location, &path)?;
     included_paths.insert(path);
     for decl in &script.0 {
         if let Decl::Include { location, path } = decl {
@@ -92,6 +98,7 @@ fn pull_in_scripts_recursive(
                     log,
                     included_paths,
                     scripts,
+                    additional_includes,
                 )?;
             }
         }
@@ -104,6 +111,7 @@ pub fn build_script_with_includes(
     path: PathBuf,
     script: Script,
     log: &mut CompilerLog,
+    additional_includes: &[PathBuf],
 ) -> Result<Script> {
     let mut included_paths = HashSet::new();
     let mut scripts = Vec::new();
@@ -118,6 +126,7 @@ pub fn build_script_with_includes(
         log,
         &mut included_paths,
         &mut scripts,
+        additional_includes,
     )?;
     Ok(Script(scripts.into_iter().flat_map(|s| s.0).collect()))
 }

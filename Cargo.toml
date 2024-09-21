@@ -1,12 +1,14 @@
 [workspace]
+resolver = "2"
 
 members = [
     "exalt-ast",
     "exalt-assembler",
-	"exalt-cli",
+    "exalt-cli",
     "exalt-compiler",
     "exalt-decompiler",
     "exalt-disassembler",
-	"exalt-lir",
-    "exalt-testing"
+    "exalt-lir",
+    "exalt-testing",
+    "exalt-completions",
 ]

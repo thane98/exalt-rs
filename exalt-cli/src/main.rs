@@ -1,6 +1,6 @@
 use anyhow::Context;
 use exalt_ast::Literal;
-use exalt_compiler::{CompileRequest, ParseRequest};
+use exalt_compiler::{CompileRequest, ParseRequest, ParseResult};
 use exalt_decompiler::IrTransform;
 use std::path::PathBuf;
 use strum_macros::EnumString;
@@ -105,7 +105,9 @@ fn load_decompiler_transform(game: Game) -> anyhow::Result<Option<IrTransform>> 
         .to_path_buf();
     let target = match game {
         Game::FE10 => Some("std/fe10/prelude.exl"),
+        Game::FE13 => Some("std/fe13/prelude.exl"),
         Game::FE14 => Some("std/fe14/prelude.exl"),
+        Game::FE15 => Some("std/fe15/prelude.exl"),
         _ => None,
     };
     if let Some(target) = target {
@@ -118,7 +120,12 @@ fn load_decompiler_transform(game: Game) -> anyhow::Result<Option<IrTransform>> 
             );
             return Ok(None);
         }
-        let (_, symbol_table) = exalt_compiler::parse(&ParseRequest { game, target: path })?;
+        let ParseResult { symbol_table, .. } = exalt_compiler::parse(&ParseRequest {
+            game,
+            target: path,
+            source: None,
+            additional_includes: vec![],
+        })?;
 
         // Populate the transform from the symbol table
         let mut transform = IrTransform::default();
@@ -178,16 +185,13 @@ fn decompile(
     Ok(())
 }
 
-fn compile(
-    game: Game,
-    target: PathBuf,
-    output: Option<PathBuf>,
-) -> anyhow::Result<()> {
+fn compile(game: Game, target: PathBuf, output: Option<PathBuf>) -> anyhow::Result<()> {
     let request = CompileRequest {
         game,
         target,
         output,
         text_data: None,
+        additional_includes: vec![],
     };
     exalt_compiler::compile(&request)?;
     Ok(())

@@ -87,6 +87,9 @@ impl<'a> SemanticAnalyzer<'a> {
                         self.log.log_error(err.into());
                     }
                 }
+                surface::Decl::FunctionExtern { location: _, identifier, parameters } => {
+                    self.define_simple_function(identifier, parameters)
+                }
                 surface::Decl::Constant {
                     location: _,
                     identifier,
@@ -811,7 +814,7 @@ impl<'a> SemanticAnalyzer<'a> {
         } else {
             let symbol = make_shared(FunctionSymbol::new(
                 ident.value.clone(),
-                ident.location.clone(),
+                Location::External,
                 args.len(),
                 None,
             ));

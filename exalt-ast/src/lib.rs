@@ -20,6 +20,7 @@ pub type Shared<T> = Rc<RefCell<T>>;
 pub enum Location {
     Source(FileId, Range<usize>),
     Generated,
+    External,
 }
 
 impl Location {
@@ -34,6 +35,14 @@ impl Location {
             }
             (Location::Generated, Location::Generated) => Location::Generated,
             _ => panic!(),
+        }
+    }
+
+    pub fn range(&self) -> Option<&Range<usize>> {
+        if let Location::Source(_, range) = self {
+            Some(range)
+        } else {
+            None
         }
     }
 }

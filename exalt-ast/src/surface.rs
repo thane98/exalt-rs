@@ -100,6 +100,28 @@ pub enum Stmt {
     Yield(Location),
 }
 
+impl Stmt {
+    pub fn location(&self) -> &Location {
+        match self {
+            Stmt::Assignment { location, .. } => location,
+            Stmt::Block(location, _) => location,
+            Stmt::Break(location) => location,
+            Stmt::Continue(location) => location,
+            Stmt::ExprStmt(location, _) => location,
+            Stmt::For { location, .. } => location,
+            Stmt::Goto(location, _) => location,
+            Stmt::If { location, .. } => location,
+            Stmt::Label(location, _) => location,
+            Stmt::Match { location, .. } => location,
+            Stmt::Printf(location, _) => location,
+            Stmt::Return(location, _) => location,
+            Stmt::VarDecl(location, _, _) => location,
+            Stmt::While { location, .. } => location,
+            Stmt::Yield(location) => location,
+        }
+    }
+}
+
 /// Raw representation of annotations
 #[derive(Debug, new)]
 pub struct Annotation {
@@ -159,6 +181,30 @@ pub enum Decl {
         identifier: Identifier,
         alias: Identifier,
     },
+    FunctionExtern {
+        location: Location,
+        identifier: Identifier,
+        parameters: Vec<Identifier>,
+    },
+}
+
+impl Decl {
+    pub fn location(&self) -> &Location {
+        match self {
+            Decl::Constant { location, .. } => location,
+            Decl::Enum { location, .. } => location,
+            Decl::Function { location, .. } => location,
+            Decl::Global(location, _, _) => location,
+            Decl::Callback { location, .. } => location,
+            Decl::Include { location, .. } => location,
+            Decl::FunctionAlias { location, .. } => location,
+            Decl::FunctionExtern { location, .. } => location,
+        }
+    }
+
+    pub fn is_function_like(&self) -> bool {
+        matches!(self, Decl::Callback { .. } | Decl::Function { .. })
+    }
 }
 
 /// Raw representation of an Exalt script

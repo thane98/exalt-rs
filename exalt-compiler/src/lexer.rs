@@ -137,6 +137,8 @@ pub enum Token {
     Else,
     #[token("enum")]
     Enum,
+    #[token("extern")]
+    Extern,
     #[token("for")]
     For,
     #[token("goto")]
@@ -174,7 +176,7 @@ pub enum Token {
     #[error]
     #[regex(r"([ \t\n\r\f]+)", logos::skip)]
     #[regex(r"//(.*)\n", logos::skip)]
-    #[regex(r"#(.*)\n")]
+    #[regex(r"#(.*)\n", logos::skip)]
     Error,
 }
 
@@ -244,6 +246,7 @@ impl Display for Token {
                 Token::Array => "array",
                 Token::Break => "break",
                 Token::Event => "event",
+                Token::Extern => "extern",
                 Token::Const => "const",
                 Token::Continue => "continue",
                 Token::Else => "else",

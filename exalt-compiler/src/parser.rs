@@ -55,6 +55,7 @@ impl<'a, 'source> Parser<'a, 'source> {
     fn parse_decl(&mut self) -> Result<Decl> {
         match self.peek_token()? {
             Token::Alias => self.parse_alias(),
+            Token::Extern => self.parse_extern(),
             Token::Const => self.parse_const(),
             Token::Enum => self.parse_enum(),
             Token::Let => self.parse_global(),
@@ -137,6 +138,21 @@ impl<'a, 'source> Parser<'a, 'source> {
             location: self.location().merge(&identifier.location),
             identifier,
             alias,
+        })
+    }
+
+    fn parse_extern(&mut self) -> Result<Decl> {
+        self.consume(Token::Extern)?;
+        self.consume(Token::Func)?;
+        let loc = self.location();
+        let identifier = self.parse_identifier()?;
+        let parameters = self.parse_function_parameters()?;
+        let location = self.location().merge(&loc);
+        self.consume(Token::Semicolon)?;
+        Ok(Decl::FunctionExtern {
+            location,
+            identifier,
+            parameters,
         })
     }
 
@@ -603,7 +619,7 @@ impl<'a, 'source> Parser<'a, 'source> {
             Token::Decrement => self.parse_prefix_increment(Token::Decrement, Operator::Decrement),
             Token::Identifier => self.parse_identifier_expr(),
             Token::LeftParen => self.parse_grouped(),
-            Token::Int => self.parse_int(),
+            Token::Int => self.parse_int(false),
             Token::Float => self.parse_float(),
             Token::Str => self.parse_string(),
             _ => Err(ParserError::ExpectedExpression(self.location())),
@@ -711,6 +727,22 @@ impl<'a, 'source> Parser<'a, 'source> {
     fn parse_unary_expr(&mut self, expected: Token, op: Operator) -> Result<Expr> {
         let loc = self.location();
         self.consume(expected)?;
+
+        // Hack for int negation. Parse and evaluate eagerly to avoid problems with i32::MIN_VALUE
+        if matches!(op, Operator::Negate) && self.lex.peek() == Some(Token::Int) {
+            let operand = self.parse_int(true)?;
+            let slice = self.lex.slice();
+            if !slice.starts_with("0b") && !slice.starts_with("0x") && !slice.starts_with("0o") {
+                return Ok(operand);
+            } else {
+                return Ok(Expr::Unary(
+                    loc.merge(operand.location()),
+                    Box::new(operand),
+                    op,
+                ));
+            }
+        }
+
         let operand = self.parse_expression(Precedence::Unary)?;
         Ok(Expr::Unary(
             loc.merge(operand.location()),
@@ -736,7 +768,7 @@ impl<'a, 'source> Parser<'a, 'source> {
         ))
     }
 
-    fn parse_int(&mut self) -> Result<Expr> {
+    fn parse_int(&mut self, negated: bool) -> Result<Expr> {
         self.consume(Token::Int)?;
         let slice = self.lex.slice();
         let value: Option<i32> = if slice.starts_with("0x") {
@@ -745,6 +777,9 @@ impl<'a, 'source> Parser<'a, 'source> {
             i32::from_str_radix(slice.strip_prefix("0o").unwrap(), 8).ok()
         } else if slice.starts_with("0b") {
             i32::from_str_radix(slice.strip_prefix("0b").unwrap(), 2).ok()
+        } else if negated {
+            let full = format!("-{}", slice);
+            full.parse().ok()
         } else {
             slice.parse().ok()
         };

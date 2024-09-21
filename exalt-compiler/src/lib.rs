@@ -1,8 +1,9 @@
 mod codegen;
+mod completion;
 mod eval;
 mod includes;
 mod lexer;
-mod parser;
+pub mod parser;
 mod reporting;
 mod semantic;
 mod symbol;
@@ -15,13 +16,13 @@ use exalt_ast::Script;
 use exalt_lir::Game;
 pub use lexer::{Peekable, Token};
 pub use reporting::CompilerLog;
-use symbol::SymbolTable;
+pub use symbol::{Scope, SymbolTable};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CompilerError {
     #[error("encountered errors during parsing")]
-    ParseError,
+    ParseError(CompilerLog),
 
     #[error("could not find target file '{0}'")]
     FileNotFound(PathBuf),
@@ -36,32 +37,43 @@ pub enum CompilerError {
     IOError(#[from] std::io::Error),
 }
 
+#[derive(Debug)]
 pub struct CompileRequest {
     pub game: Game,
     pub target: PathBuf,
     pub output: Option<PathBuf>,
     pub text_data: Option<CodeGenTextData>,
+    pub additional_includes: Vec<PathBuf>,
 }
 
 pub struct ParseRequest {
     pub game: Game,
     pub target: PathBuf,
+    pub source: Option<String>,
+    pub additional_includes: Vec<PathBuf>,
 }
 
 impl ParseRequest {
     pub fn source_name(&self) -> Result<String, CompilerError> {
         self.target
-            .file_name()
-            .map(|f| f.to_string_lossy().to_string())
+            .to_str()
+            .map(|s| s.to_string())
             .ok_or_else(|| CompilerError::BadTargetFile(self.target.clone()))
     }
+}
+
+pub struct ParseResult {
+    pub parse_tree: exalt_ast::surface::Script,
+    pub script: Script,
+    pub symbol_table: SymbolTable,
+    pub log: CompilerLog,
 }
 
 impl CompileRequest {
     pub fn source_name(&self) -> Result<String, CompilerError> {
         self.target
-            .file_name()
-            .map(|f| f.to_string_lossy().to_string())
+            .to_str()
+            .map(|s| s.to_string())
             .ok_or_else(|| CompilerError::BadTargetFile(self.target.clone()))
     }
 
@@ -90,6 +102,10 @@ impl CompileRequest {
 }
 
 pub fn compile(request: &CompileRequest) -> Result<(), CompilerError> {
+    let output_path = request.output_path()?;
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|_| CompilerError::BadTargetFile(output_path))?;
+    }
     std::fs::write(request.output_path()?, compile_to_vec(request)?)?;
     Ok(())
 }
@@ -103,17 +119,23 @@ pub fn compile_to_vec(request: &CompileRequest) -> Result<Vec<u8>, CompilerError
     let mut log = CompilerLog::new();
     let script = parser::parse(log.peek_file_id(), &contents, &mut log);
     log.add(request.source_name()?, contents.clone());
-    let script = match includes::build_script_with_includes(request.target.clone(), script, &mut log) {
+
+    let script = match includes::build_script_with_includes(
+        request.target.clone(),
+        script,
+        &mut log,
+        &request.additional_includes,
+    ) {
         Ok(script) => script,
         Err(err) => {
             log.log_error(err.into());
             log.print();
-            return Err(CompilerError::ParseError);
+            return Err(CompilerError::ParseError(log));
         }
     };
     if log.has_errors() {
         log.print();
-        return Err(CompilerError::ParseError);
+        return Err(CompilerError::ParseError(log));
     }
 
     // Evaluate sources
@@ -121,7 +143,7 @@ pub fn compile_to_vec(request: &CompileRequest) -> Result<Vec<u8>, CompilerError
         script
     } else {
         log.print();
-        return Err(CompilerError::ParseError);
+        return Err(CompilerError::ParseError(log));
     };
 
     // Generate code
@@ -138,33 +160,44 @@ pub fn compile_to_vec(request: &CompileRequest) -> Result<Vec<u8>, CompilerError
     }
 }
 
-pub fn parse(request: &ParseRequest) -> Result<(Script, SymbolTable), CompilerError> {
+pub fn parse(request: &ParseRequest) -> Result<ParseResult, CompilerError> {
     // Load input
-    let contents = std::fs::read_to_string(&request.target)
-        .map_err(|_| CompilerError::FileNotFound(request.target.clone()))?;
+    let contents = if let Some(source) = &request.source {
+        source.clone()
+    } else {
+        std::fs::read_to_string(&request.target)
+            .map_err(|_| CompilerError::FileNotFound(request.target.clone()))?
+    };
 
     // Parse sources
     let mut log = CompilerLog::new();
-    let script = parser::parse(log.peek_file_id(), &contents, &mut log);
+    let parse_tree = parser::parse(log.peek_file_id(), &contents, &mut log);
     log.add(request.source_name()?, contents.clone());
-    let script = match includes::build_script_with_includes(request.target.clone(), script, &mut log) {
-        Ok(script) => script,
+    let parse_tree = match includes::build_script_with_includes(
+        request.target.clone(),
+        parse_tree,
+        &mut log,
+        &request.additional_includes,
+    ) {
+        Ok(parse_tree) => parse_tree,
         Err(err) => {
             log.log_error(err.into());
-            log.print();
-            return Err(CompilerError::ParseError);
+            return Err(CompilerError::ParseError(log));
         }
     };
     if log.has_errors() {
-        log.print();
-        return Err(CompilerError::ParseError);
+        return Err(CompilerError::ParseError(log));
     }
 
     // Evaluate sources
-    if let Some(pair) = semantic::analyze(&script, &mut log) {
-        Ok(pair)
+    if let Some((script, symbol_table)) = semantic::analyze(&parse_tree, &mut log) {
+        Ok(ParseResult {
+            parse_tree,
+            script,
+            symbol_table,
+            log,
+        })
     } else {
-        log.print();
-        Err(CompilerError::ParseError)
+        Err(CompilerError::ParseError(log))
     }
 }

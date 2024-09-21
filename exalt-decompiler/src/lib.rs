@@ -333,7 +333,7 @@ fn decompile_opcode(state: &mut DecompilerState) -> Result<()> {
                 .functions
                 .get(id)
                 .ok_or_else(|| anyhow!("bad function id {}", id))?;
-            let args = state.expr_stack.pop_args((*arity) as usize)?;
+            let args = state.expr_stack.pop_args(*arity)?;
             state.expr_stack.push(Expr::Call(Cow::Borrowed(name), args));
         }
         Opcode::CallByName(name, arity) => {

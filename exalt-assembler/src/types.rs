@@ -38,13 +38,13 @@ pub struct CodeGenLabelEntry {
     pub jumps: Vec<usize>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum CodeGenTextStrategy {
     Dynamic,
     HardCoded,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CodeGenTextData {
     pub raw_text: Vec<u8>,
     pub offsets: FxHashMap<String, usize>,

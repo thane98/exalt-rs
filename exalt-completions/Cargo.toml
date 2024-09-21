@@ -1,0 +1,8 @@
+[package]
+name = "exalt-completions"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+exalt-compiler = { path = "../exalt-compiler" }
+exalt-ast = { path = "../exalt-ast" }

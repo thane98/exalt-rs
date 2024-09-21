@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -24,6 +25,10 @@ impl CompilerLog {
             files: SimpleFiles::new(),
             next_file_id: 0,
         }
+    }
+
+    pub fn file(&self, file_id: FileId) -> Option<String> {
+        self.files.get(file_id).ok().map(|f| f.name().to_string())
     }
 
     pub fn peek_file_id(&self) -> FileId {
@@ -65,7 +70,7 @@ impl CompilerLog {
     }
 }
 
-impl<'source> Default for CompilerLog {
+impl Default for CompilerLog {
     fn default() -> Self {
         Self::new()
     }
@@ -79,6 +84,20 @@ pub enum ErrorMessage {
 }
 
 impl ErrorMessage {
+    pub fn location(&self) -> Option<&Location> {
+        match self {
+            ErrorMessage::Parser(err) => err.location(),
+            ErrorMessage::Semantic(err) => Some(err.location()),
+        }
+    }
+
+    pub fn message(&self) -> Cow<str> {
+        match self {
+            ErrorMessage::Parser(err) => err.message(),
+            ErrorMessage::Semantic(err) => err.message(),
+        }
+    }
+
     pub fn to_diagnostic(&self) -> Diagnostic<FileId> {
         match self {
             ErrorMessage::Parser(err) => err.to_diagnostic(),
@@ -122,6 +141,60 @@ pub enum ParserError {
 }
 
 impl ParserError {
+    pub fn location(&self) -> Option<&Location> {
+        match self {
+            ParserError::InvalidToken(l) => Some(l),
+            ParserError::UnexpectedEof => None,
+            ParserError::UnexpectedToken(l, _, _) => Some(l),
+            ParserError::InvalidInt(l) => Some(l),
+            ParserError::InvalidFloat(l) => Some(l),
+            ParserError::ExpectedAssignment(l) => Some(l),
+            ParserError::ExpectedExpression(l) => Some(l),
+            ParserError::ExpectedReference(l) => Some(l),
+            ParserError::ExpectedLoopRange(l) => Some(l),
+            ParserError::ExpectedStmt(l) => Some(l),
+            ParserError::ExpectedDecl(l) => Some(l),
+            ParserError::MultipleDefaultCases(l, _) => Some(l),
+            ParserError::DoubleDereference(l) => Some(l),
+            ParserError::ExpectedIncludePathComponent(l) => Some(l),
+            ParserError::PathNormalizationError(l, _) => Some(l),
+            ParserError::IncludeNotFound(l) => Some(l),
+            ParserError::IncludeError(l) => Some(l),
+        }
+    }
+
+    pub fn message(&self) -> Cow<str> {
+        match self {
+            ParserError::InvalidToken(_) => Cow::Borrowed("invalid token"),
+            ParserError::UnexpectedEof => Cow::Borrowed("unexpected end of file"),
+            ParserError::UnexpectedToken(_, e, a) => {
+                Cow::Owned(format!("expected token '{}' found '{}'", e, a))
+            }
+            ParserError::InvalidInt(_) => Cow::Borrowed("int value must fit in 32 bits"),
+            ParserError::InvalidFloat(_) => Cow::Borrowed("float value must fit in 32 bits"),
+            ParserError::ExpectedAssignment(_) => Cow::Borrowed("expected assignment"),
+            ParserError::ExpectedExpression(_) => Cow::Borrowed("expected expression"),
+            ParserError::ExpectedReference(_) => Cow::Borrowed("expected reference"),
+            ParserError::ExpectedLoopRange(_) => Cow::Borrowed("expected loop range"),
+            ParserError::ExpectedStmt(_) => Cow::Borrowed("expected statement"),
+            ParserError::ExpectedDecl(_) => Cow::Borrowed("expected declaration"),
+            ParserError::MultipleDefaultCases(_, _) => {
+                Cow::Borrowed("match can only have one default case")
+            }
+            ParserError::DoubleDereference(_) => {
+                Cow::Borrowed("Exalt does not support double dereferences")
+            }
+            ParserError::ExpectedIncludePathComponent(_) => {
+                Cow::Borrowed("expected include path component")
+            }
+            ParserError::PathNormalizationError(_, p) => {
+                Cow::Owned(format!("unable to normalize path {}", p.display()))
+            }
+            ParserError::IncludeNotFound(_) => Cow::Borrowed("unable to resolve path"),
+            ParserError::IncludeError(_) => Cow::Borrowed("undefined include error"),
+        }
+    }
+
     pub fn to_diagnostic(&self) -> Diagnostic<FileId> {
         match self {
             ParserError::InvalidToken(l) => Diagnostic::error()
@@ -238,6 +311,68 @@ pub enum SemanticError {
 }
 
 impl SemanticError {
+    pub fn location(&self) -> &Location {
+        match self {
+            SemanticError::ExpectedConstExpr(l) => l,
+            SemanticError::SymbolRedefinition(l, _, _) => l,
+            SemanticError::UndefinedVariable(i) => &i.location,
+            SemanticError::UndefinedAnnotation(i) => &i.location,
+            SemanticError::UndefinedEnum(i) => &i.location,
+            SemanticError::UndefinedVariant(i) => &i.location,
+            SemanticError::IncompatibleOperator(l, _, _) => l,
+            SemanticError::IncompatibleOperands(l, _, _) => l,
+            SemanticError::DivideByZero(l) => l,
+            SemanticError::ExpectedReferenceOperand(l) => l,
+            SemanticError::BadBreak(l) => l,
+            SemanticError::BadContinue(l) => l,
+            SemanticError::UnresolvedLabel(l, _) => l,
+            SemanticError::InvalidType(l, _, _) => l,
+            SemanticError::SignatureDisagreement(l, _) => l,
+            SemanticError::BadArgCount(l, _, _) => l,
+            SemanticError::BadExlCall(l) => l,
+            SemanticError::NegativeArrayLength(l) => l,
+        }
+    }
+
+    pub fn message(&self) -> Cow<str> {
+        match self {
+            SemanticError::ExpectedConstExpr(_) => Cow::Borrowed("expected constant expression"),
+            SemanticError::SymbolRedefinition(_, _, _) => {
+                Cow::Borrowed("symbol redefined in the same scope")
+            }
+            SemanticError::UndefinedVariable(_) => Cow::Borrowed("undefined variable"),
+            SemanticError::UndefinedAnnotation(_) => Cow::Borrowed("undefined annotation"),
+            SemanticError::UndefinedEnum(_) => Cow::Borrowed("undefined enum"),
+            SemanticError::UndefinedVariant(_) => Cow::Borrowed("undefined variant"),
+            SemanticError::IncompatibleOperator(_, _, _) => {
+                Cow::Borrowed("operator has incompatible operand")
+            }
+            SemanticError::IncompatibleOperands(_, _, _) => {
+                Cow::Borrowed("operator has incompatible types")
+            }
+            SemanticError::DivideByZero(_) => Cow::Borrowed("division by zero"),
+            SemanticError::ExpectedReferenceOperand(_) => {
+                Cow::Borrowed("operation requires a variable")
+            }
+            SemanticError::BadBreak(_) => Cow::Borrowed("break cannot be used in this context"),
+            SemanticError::BadContinue(_) => {
+                Cow::Borrowed("continue cannot be used in this context")
+            }
+            SemanticError::UnresolvedLabel(_, _) => Cow::Borrowed("unresolved label"),
+            SemanticError::InvalidType(_, _, _) => Cow::Borrowed("type mismatch"),
+            SemanticError::SignatureDisagreement(_, _) => {
+                Cow::Borrowed("actual and expected signatures differ")
+            }
+            SemanticError::BadArgCount(_, _, _) => Cow::Borrowed("incorrect number of arguments"),
+            SemanticError::BadExlCall(_) => {
+                Cow::Borrowed("exlcall takes an integer call id as its first argument")
+            }
+            SemanticError::NegativeArrayLength(_) => {
+                Cow::Borrowed("array length cannot be negative")
+            }
+        }
+    }
+
     pub fn to_diagnostic(&self) -> Diagnostic<FileId> {
         match self {
             SemanticError::ExpectedConstExpr(l) => Diagnostic::error()
@@ -359,6 +494,20 @@ pub enum WarningMessage {
 }
 
 impl WarningMessage {
+    pub fn location(&self) -> &Location {
+        match self {
+            WarningMessage::DeadCode(l) => l,
+            WarningMessage::UnusedLabel(l) => l,
+        }
+    }
+
+    pub fn message(&self) -> Cow<str> {
+        match self {
+            WarningMessage::DeadCode(_) => Cow::Borrowed("unreachable code"),
+            WarningMessage::UnusedLabel(_) => Cow::Borrowed("label is never used"),
+        }
+    }
+
     pub fn to_diagnostic(&self) -> Diagnostic<FileId> {
         match self {
             WarningMessage::DeadCode(l) => Diagnostic::warning()
@@ -375,6 +524,7 @@ fn primary(location: &Location) -> Option<Label<FileId>> {
     match location {
         Location::Source(file_id, range) => Some(Label::primary(*file_id, range.clone())),
         Location::Generated => None,
+        _ => None,
     }
 }
 
@@ -382,6 +532,7 @@ fn secondary(location: &Location) -> Option<Label<FileId>> {
     match location {
         Location::Source(file_id, range) => Some(Label::secondary(*file_id, range.clone())),
         Location::Generated => None,
+        _ => None,
     }
 }
 

@@ -204,6 +204,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "exalt-completions"
+version = "0.1.0"
+dependencies = [
+ "exalt-ast",
+ "exalt-compiler",
+]
+
+[[package]]
 name = "exalt-decompiler"
 version = "0.1.0"
 dependencies = [
