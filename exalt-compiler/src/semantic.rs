@@ -88,7 +88,7 @@ impl<'a> SemanticAnalyzer<'a> {
                     }
                 }
                 surface::Decl::FunctionExtern { location: _, identifier, parameters } => {
-                    self.define_simple_function(identifier, parameters)
+                    self.define_simple_function(identifier, parameters, true)
                 }
                 surface::Decl::Constant {
                     location: _,
@@ -106,7 +106,7 @@ impl<'a> SemanticAnalyzer<'a> {
                     identifier,
                     parameters,
                     body: _,
-                } => self.define_simple_function(identifier, parameters),
+                } => self.define_simple_function(identifier, parameters, false),
                 surface::Decl::Global(_, identifier, count) => {
                     self.define_global(identifier, count.as_ref())
                 }
@@ -218,12 +218,13 @@ impl<'a> SemanticAnalyzer<'a> {
         }
     }
 
-    fn define_simple_function(&mut self, identifier: &Identifier, params: &[Identifier]) {
+    fn define_simple_function(&mut self, identifier: &Identifier, params: &[Identifier], allow_redefinition: bool) {
         let symbol = make_shared(FunctionSymbol::new(
             identifier.value.clone(),
             identifier.location.clone(),
             params.len(),
             None,
+            allow_redefinition,
         ));
         if let Err(err) = self
             .symbol_table
@@ -817,6 +818,7 @@ impl<'a> SemanticAnalyzer<'a> {
                 Location::External,
                 args.len(),
                 None,
+                false,
             ));
             self.symbol_table
                 .define_function(ident.value.clone(), symbol.clone())?;

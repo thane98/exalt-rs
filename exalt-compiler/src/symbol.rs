@@ -112,23 +112,23 @@ impl SymbolTable {
         let mut functions = HashMap::new();
         functions.insert(
             "negate".to_owned(),
-            FunctionSymbol::shared("negate".to_owned(), Location::Generated, 1, None),
+            FunctionSymbol::shared("negate".to_owned(), Location::Generated, 1, None, false),
         );
         functions.insert(
             "fix".to_owned(),
-            FunctionSymbol::shared("fix".to_owned(), Location::Generated, 1, None),
+            FunctionSymbol::shared("fix".to_owned(), Location::Generated, 1, None, false),
         );
         functions.insert(
             "float".to_owned(),
-            FunctionSymbol::shared("float".to_owned(), Location::Generated, 1, None),
+            FunctionSymbol::shared("float".to_owned(), Location::Generated, 1, None, false),
         );
         functions.insert(
             "streq".to_owned(),
-            FunctionSymbol::shared("streq".to_owned(), Location::Generated, 2, None),
+            FunctionSymbol::shared("streq".to_owned(), Location::Generated, 2, None, false),
         );
         functions.insert(
             "strne".to_owned(),
-            FunctionSymbol::shared("strne".to_owned(), Location::Generated, 2, None),
+            FunctionSymbol::shared("strne".to_owned(), Location::Generated, 2, None, false),
         );
 
         SymbolTable {
@@ -166,11 +166,19 @@ impl SymbolTable {
 
     pub fn define_function(&mut self, name: String, symbol: Shared<FunctionSymbol>) -> Result<()> {
         match self.functions.get(&name) {
-            Some(original) => Err(SemanticError::SymbolRedefinition(
-                original.borrow().location.clone(),
-                symbol.borrow().location.clone(),
-                name,
-            )),
+            Some(original) => {
+                if original.borrow().allow_redefinition {
+                    // Allow redefinition of external functions for now.
+                    self.functions.insert(name, symbol);
+                    Ok(())
+                } else {
+                    Err(SemanticError::SymbolRedefinition(
+                        original.borrow().location.clone(),
+                        symbol.borrow().location.clone(),
+                        name,
+                    ))
+                }
+            }
             None => {
                 self.functions.insert(name, symbol);
                 Ok(())
