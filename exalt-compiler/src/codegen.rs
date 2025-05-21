@@ -89,6 +89,7 @@ struct CodeGenerator<'a> {
     function_to_call_id: HashMap<String, usize>,
     next_label: usize,
     frame_size: usize,
+    current_function_id: usize,
     continue_labels: Vec<String>,
     break_labels: Vec<String>,
     assigned_variables: HashSet<String>,
@@ -103,13 +104,14 @@ impl<'a> CodeGenerator<'a> {
             function_to_call_id: CodeGenerator::generate_function_to_call_id(script),
             next_label: 0,
             frame_size: 0,
+            current_function_id: 0,
             continue_labels: Vec::new(),
             break_labels: Vec::new(),
             assigned_variables: HashSet::new(),
             game,
         };
-        for decl in &script.decls {
-            functions.push(generator.generate_function_data(decl)?);
+        for (function_id, decl) in script.decls.iter().enumerate() {
+            functions.push(generator.generate_function_data(decl, function_id)?);
         }
         Ok(RawScript {
             functions,
@@ -134,8 +136,9 @@ impl<'a> CodeGenerator<'a> {
         entries
     }
 
-    fn generate_function_data(&mut self, decl: &Decl) -> Result<RawFunction> {
+    fn generate_function_data(&mut self, decl: &Decl, function_id: usize) -> Result<RawFunction> {
         self.frame_size = 0;
+        self.current_function_id = function_id;
         self.continue_labels.clear();
         self.break_labels.clear();
         self.assigned_variables.clear();
@@ -561,7 +564,18 @@ impl<'a> CodeGenerator<'a> {
                     "strne" => opcodes.push(Opcode::StringNotEquals),
                     _ => match self.function_to_call_id.get(&symbol.name) {
                         Some(id) => {
-                            opcodes.push(Opcode::CallById(*id));
+                            if matches!(self.game, Game::FE10) && *id > self.current_function_id {
+                                let resolved_name = if let Some((_, alias)) =
+                                    self.symbol_table.lookup_alias(&symbol.name)
+                                {
+                                    alias.clone()
+                                } else {
+                                    symbol.name.clone()
+                                };
+                                opcodes.push(Opcode::CallByName(resolved_name, symbol.arity as u8));
+                            } else {
+                                opcodes.push(Opcode::CallById(*id));
+                            }
                         }
                         None => {
                             let resolved_name = if let Some((_, alias)) =

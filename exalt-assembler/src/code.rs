@@ -201,7 +201,7 @@ fn serialize_wii_opcode(
                 bytes.push(*v as u8);
             } else {
                 let v = *v as u16;
-                let extended = 0x8000 | (v & 0x7F) | ((v & 0x7F80) << 1);
+                let extended = 0x8000 | v;
                 bytes.extend(extended.to_be_bytes().iter());
             }
         }

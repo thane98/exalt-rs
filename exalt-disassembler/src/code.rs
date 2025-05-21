@@ -244,7 +244,7 @@ fn read_wii_opcode(
         0x37 => {
             let b1 = cursor.read_u8()?;
             let value = if (b1 & 0x80) != 0 {
-                ((b1 as u16 & 0x7F) << 7) | cursor.read_u8()? as u16
+                ((b1 as u16 & 0x7F) << 8) | cursor.read_u8()? as u16
             } else {
                 b1 as u16
             };

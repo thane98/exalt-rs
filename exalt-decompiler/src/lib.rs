@@ -532,7 +532,7 @@ fn decompile_match(state: &mut DecompilerState) -> Result<()> {
     let switch = state.expr_stack.pop()?;
     let mut cases = Vec::new();
     let mut default = None;
-    let mut done_label: Option<&str>;
+    let mut done_label: Option<&str> = None;
     loop {
         // Read conditions for the current case
         let mut conditions = Vec::new();
@@ -569,12 +569,10 @@ fn decompile_match(state: &mut DecompilerState) -> Result<()> {
         decompile_until(state, next_case_label)?;
         state.opcodes.next(); // Discard the label
         let mut body = state.block_stack.pop()?;
-        let end_label = if let Some(Stmt::Goto(label)) = body.pop() {
-            label
-        } else {
-            bail!("malformed match - case did not end with a jump")
-        };
-        done_label = Some(end_label);
+        if let Some(Stmt::Goto(label)) = body.last() {
+            done_label = Some(label);
+            body.pop();
+        }
         cases.push(Case {
             conditions,
             body: Stmt::Block(body),
@@ -592,9 +590,27 @@ fn decompile_match(state: &mut DecompilerState) -> Result<()> {
             }
             Some(_) => {
                 state.block_stack.push();
-                decompile_until(state, end_label)?;
+                if done_label.is_none() {
+                    // This only happens when cases further up exit through a return instead.
+                    // We have to know where the default case ends, but we cannot know that without the label.
+                    // The following line should decompile a single jump to the end of the default case (i.e. the default case is empty)
+                    //
+                    // Example of expected code:
+                    // match (myValue) {
+                    //     0, 1, 2, 3 -> { return true; }
+                    //     else -> {}
+                    // }
+                    decompile_opcode(state)?;
+                } else {
+                    decompile_until(state, done_label.unwrap())?;
+                }
                 let mut body = state.block_stack.pop()?;
-                body.pop();
+                let end_jump = body.pop();
+                if done_label.is_none() {
+                    if let Some(Stmt::Goto(label)) = end_jump {
+                        done_label = Some(label);
+                    }
+                }
                 state.opcodes.next(); // Consume the end label
                 default = Some(Stmt::Block(body));
                 state.opcodes.next(); // Consume the consume opcode
