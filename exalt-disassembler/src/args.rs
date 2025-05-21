@@ -88,6 +88,7 @@ lazy_static! {
                 CallbackArgType::Int,
                 CallbackArgType::Str,
             ],
+            0xA => vec![CallbackArgType::Str],
             0xB => vec![CallbackArgType::Str],
             0xC => vec![CallbackArgType::Str],
             0xE => vec![
