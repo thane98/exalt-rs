@@ -8,7 +8,6 @@ The assembler should work if the compiler fails.
 - Everything for the compiler. This is not being prioritized.
 
 ## FE10
-- startup.cmb (fails to decompile - likely due to switch/case fall through)
 - C0401.cmb (Exalt evaluates a constant expression that IS's did not)
 
 ## FE11
